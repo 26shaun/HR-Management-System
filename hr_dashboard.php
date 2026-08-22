@@ -6,8 +6,24 @@ $pageTitle = "HR Command Center";
 $pageSubtitle = "Workforce overview, leave approvals, and employee operations";
 
 $db = getDBConnection();
+$currentUser = getCurrentUser();
 $today = date('Y-m-d');
 
+// Get today's attendance for the logged-in HR user
+$hrAttendanceStatement = $db->prepare("
+    SELECT *
+    FROM attendance
+    WHERE user_id = ?
+    AND date = ?
+    LIMIT 1
+");
+
+$hrAttendanceStatement->execute([
+    $currentUser['id'],
+    $today
+]);
+
+$hrTodayAttendance = $hrAttendanceStatement->fetch();
 // 1. Fetch Metrics
 $totalEmployees = $db->query("SELECT COUNT(*) FROM users WHERE role = 'employee'")->fetchColumn();
 $presentToday = $db->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE date = '$today'")->fetchColumn();
@@ -60,7 +76,13 @@ $departments = $deptStmt->fetchAll();
 
 $flashSuccess = $_SESSION['flash_success'] ?? null;
 $flashError = $_SESSION['flash_error'] ?? null;
-unset($_SESSION['flash_success'], $_SESSION['flash_error']);
+$flashInfo = $_SESSION['flash_info'] ?? null;
+
+unset(
+    $_SESSION['flash_success'],
+    $_SESSION['flash_error'],
+    $_SESSION['flash_info']
+);
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -86,6 +108,12 @@ include __DIR__ . '/includes/header.php';
                     <span><?= htmlspecialchars($flashError) ?></span>
                 </div>
             <?php endif; ?>
+            <?php if ($flashInfo): ?>
+    <div class="alert alert-info">
+        <i class="fa-solid fa-circle-info"></i>
+        <span><?= htmlspecialchars($flashInfo) ?></span>
+    </div>
+<?php endif; ?>
 
             <!-- Stat Metric Cards -->
             <div class="stat-grid">
@@ -129,7 +157,170 @@ include __DIR__ . '/includes/header.php';
                     </div>
                 </div>
             </div>
+<!-- HR Attendance Card -->
+<div class="card" style="margin-bottom: 2rem;">
+    <div class="card-header">
+        <div class="card-title">
+            <i
+                class="fa-solid fa-user-clock"
+                style="color: var(--primary);"
+            ></i>
 
+            My Attendance
+        </div>
+
+        <?php if (!$hrTodayAttendance): ?>
+            <span class="status-pill pending">
+                Not checked in
+            </span>
+        <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
+            <span class="status-pill active">
+                Working
+            </span>
+        <?php else: ?>
+            <span class="status-pill approved">
+                Completed
+            </span>
+        <?php endif; ?>
+    </div>
+
+    <div
+        style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            padding: 0.5rem;
+        "
+    >
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            <div>
+                <div
+                    style="
+                        color: var(--text-muted);
+                        font-size: 0.75rem;
+                        margin-bottom: 0.3rem;
+                    "
+                >
+                    CHECK-IN TIME
+                </div>
+
+                <strong style="font-size: 1.1rem;">
+                    <?=
+                        $hrTodayAttendance
+                            ? formatTime(
+                                $hrTodayAttendance['clock_in']
+                            )
+                            : '--:--'
+                    ?>
+                </strong>
+            </div>
+
+            <div>
+                <div
+                    style="
+                        color: var(--text-muted);
+                        font-size: 0.75rem;
+                        margin-bottom: 0.3rem;
+                    "
+                >
+                    CHECK-OUT TIME
+                </div>
+
+                <strong style="font-size: 1.1rem;">
+                    <?=
+                        !empty($hrTodayAttendance['clock_out'])
+                            ? formatTime(
+                                $hrTodayAttendance['clock_out']
+                            )
+                            : '--:--'
+                    ?>
+                </strong>
+            </div>
+
+            <div>
+                <div
+                    style="
+                        color: var(--text-muted);
+                        font-size: 0.75rem;
+                        margin-bottom: 0.3rem;
+                    "
+                >
+                    TOTAL HOURS
+                </div>
+
+                <strong style="font-size: 1.1rem;">
+                    <?=
+                        !empty($hrTodayAttendance['clock_out'])
+                            ? htmlspecialchars(
+                                $hrTodayAttendance['total_hours']
+                            ) . ' hrs'
+                            : '--'
+                    ?>
+                </strong>
+            </div>
+        </div>
+
+        <div>
+            <?php if (!$hrTodayAttendance): ?>
+                <form
+                    action="actions/attendance_action.php"
+                    method="POST"
+                >
+                    <input
+                        type="hidden"
+                        name="action"
+                        value="clock_in"
+                    >
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary"
+                    >
+                        <i class="fa-solid fa-right-to-bracket"></i>
+                        Check In
+                    </button>
+                </form>
+
+            <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
+                <form
+                    action="actions/attendance_action.php"
+                    method="POST"
+                >
+                    <input
+                        type="hidden"
+                        name="action"
+                        value="clock_out"
+                    >
+
+                    <button
+                        type="submit"
+                        class="btn btn-danger"
+                    >
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        Check Out
+                    </button>
+                </form>
+
+                <p
+                    style="
+                        margin-top: 0.5rem;
+                        color: var(--text-muted);
+                        font-size: 0.7rem;
+                    "
+                >
+                    Checkout is allowed after completing six hours.
+                </p>
+
+            <?php else: ?>
+                <span style="color: var(--text-muted);">
+                    Attendance completed for today
+                </span>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
             <!-- Quick Action Bar -->
             <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
                 <button class="btn btn-primary" onclick="openModal('addEmployeeModal')">
@@ -150,7 +341,7 @@ include __DIR__ . '/includes/header.php';
                     <span class="status-pill pending"><?= $pendingLeaves ?> Pending Review</span>
                 </div>
 
-                <div class="table-responsive">
+                <<div class="table-responsive">
                     <table class="custom-table">
                         <thead>
                             <tr>
@@ -160,78 +351,158 @@ include __DIR__ . '/includes/header.php';
                                 <th>Duration</th>
                                 <th>Reason</th>
                                 <th>Status</th>
+                                <th>Payment</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
+
                         <tbody>
                             <?php if (empty($leaves)): ?>
                                 <tr>
-                                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                                         No leave applications submitted yet.
                                     </td>
                                 </tr>
                             <?php else: ?>
+
                                 <?php foreach ($leaves as $l): ?>
                                     <tr>
                                         <td>
-                                            <strong><?= htmlspecialchars($l['employee_name']) ?></strong>
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);"><?= htmlspecialchars($l['employee_email']) ?></div>
+                                            <strong>
+                                                <?= htmlspecialchars($l['employee_name']) ?>
+                                            </strong>
+
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                <?= htmlspecialchars($l['employee_email']) ?>
+                                            </div>
                                         </td>
-                                        <td><?= htmlspecialchars($l['department_name'] ?? 'General') ?></td>
-                                        <td><strong><?= htmlspecialchars($l['leave_type']) ?></strong></td>
+
                                         <td>
-                                            <?= formatNiceDate($l['start_date']) ?> to <?= formatNiceDate($l['end_date']) ?>
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);"><?= $l['total_days'] ?> day(s)</div>
+                                            <?= htmlspecialchars(
+                                                $l['department_name'] ?? 'General'
+                                            ) ?>
                                         </td>
+
+                                        <td>
+                                            <strong>
+                                                <?= htmlspecialchars($l['leave_type']) ?>
+                                            </strong>
+                                        </td>
+
+                                        <td>
+                                            <?= formatNiceDate($l['start_date']) ?>
+                                            to
+                                            <?= formatNiceDate($l['end_date']) ?>
+
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                <?= (int) $l['total_days'] ?> day(s)
+                                            </div>
+                                        </td>
+
                                         <td style="max-width: 250px;">
                                             <span title="<?= htmlspecialchars($l['reason']) ?>">
-                                                <?= htmlspecialchars(mb_strimwidth($l['reason'], 0, 45, '...')) ?>
+                                                <?= htmlspecialchars(
+                                                    mb_strimwidth(
+                                                        $l['reason'],
+                                                        0,
+                                                        45,
+                                                        '...'
+                                                    )
+                                                ) ?>
                                             </span>
                                         </td>
+
                                         <td>
-                                            <span class="status-pill <?= htmlspecialchars($l['status']) ?>">
+                                            <span class="status-pill <?= htmlspecialchars(
+                                                $l['status']
+                                            ) ?>">
                                                 <?= ucfirst($l['status']) ?>
                                             </span>
                                         </td>
+
+                                        <td>
+                                            <?php if (!empty($l['payment_type'])): ?>
+                                                <span class="status-pill <?=
+                                                    $l['payment_type'] === 'paid'
+                                                    ? 'active'
+                                                    : 'rejected'
+                                                    ?>">
+                                                    <?= ucfirst($l['payment_type']) ?>
+                                                    Leave
+                                                </span>
+                                            <?php else: ?>
+                                                <span style="color: var(--text-muted); font-size: 0.8rem;">
+                                                    Not assigned
+                                                </span>
+                                            <?php endif; ?>
+                                        </td>
+
                                         <td>
                                             <?php if ($l['status'] === 'pending'): ?>
-                                                <div style="display: flex; gap: 0.4rem;">
-                                                    <!-- Approve Button -->
-                                                    <form action="actions/leave_action.php" method="POST" style="display: inline;">
+                                                <div style="display: flex; gap: 0.4rem; align-items: flex-start;">
+                                                    <!-- Approve form -->
+                                                    <form action="actions/leave_action.php" method="POST">
                                                         <input type="hidden" name="action" value="review_leave">
-                                                        <input type="hidden" name="leave_id" value="<?= $l['id'] ?>">
+
+                                                        <input type="hidden" name="leave_id" value="<?= (int) $l['id'] ?>">
+
                                                         <input type="hidden" name="status" value="approved">
+
                                                         <input type="hidden" name="review_comment" value="Approved by HR.">
+
+                                                        <select name="payment_type" class="form-control" required
+                                                            style="min-width: 145px; padding: 0.45rem; margin-bottom: 0.4rem;">
+                                                            <option value="">
+                                                                Select payment
+                                                            </option>
+
+                                                            <option value="paid">
+                                                                Paid Leave
+                                                            </option>
+
+                                                            <option value="unpaid">
+                                                                Unpaid Leave
+                                                            </option>
+                                                        </select>
+
                                                         <button type="submit" class="btn btn-success btn-sm" title="Approve">
-                                                            <i class="fa-solid fa-check"></i> Approve
+                                                            <i class="fa-solid fa-check"></i>
+                                                            Approve
                                                         </button>
                                                     </form>
 
-                                                    <!-- Reject Button -->
-                                                    <form action="actions/leave_action.php" method="POST" style="display: inline;">
+                                                    <!-- Reject form -->
+                                                    <form action="actions/leave_action.php" method="POST">
                                                         <input type="hidden" name="action" value="review_leave">
-                                                        <input type="hidden" name="leave_id" value="<?= $l['id'] ?>">
+
+                                                        <input type="hidden" name="leave_id" value="<?= (int) $l['id'] ?>">
+
                                                         <input type="hidden" name="status" value="rejected">
+
                                                         <input type="hidden" name="review_comment" value="Declined by HR.">
+
                                                         <button type="submit" class="btn btn-danger btn-sm" title="Reject">
-                                                            <i class="fa-solid fa-xmark"></i> Reject
+                                                            <i class="fa-solid fa-xmark"></i>
+                                                            Reject
                                                         </button>
                                                     </form>
                                                 </div>
                                             <?php else: ?>
                                                 <span style="font-size: 0.8rem; color: var(--text-muted);">
-                                                    Reviewed by <?= htmlspecialchars($l['reviewer_name'] ?? 'HR') ?>
+                                                    Reviewed by
+                                                    <?= htmlspecialchars(
+                                                        $l['reviewer_name'] ?? 'HR'
+                                                    ) ?>
                                                 </span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
+
                             <?php endif; ?>
                         </tbody>
                     </table>
-                </div>
             </div>
-
             <div class="grid-3">
                 <!-- Employee Directory -->
                 <div class="card" id="employeesSection">
@@ -261,17 +532,21 @@ include __DIR__ . '/includes/header.php';
                                     <tr>
                                         <td>
                                             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                                <div class="user-mini-avatar" style="width: 34px; height: 34px; font-size: 0.8rem;">
+                                                <div class="user-mini-avatar"
+                                                    style="width: 34px; height: 34px; font-size: 0.8rem;">
                                                     <?= strtoupper(substr($emp['name'], 0, 1)) ?>
                                                 </div>
                                                 <div>
-                                                    <div style="font-weight: 600;"><?= htmlspecialchars($emp['name']) ?></div>
-                                                    <div style="font-size: 0.75rem; color: var(--text-muted);"><?= htmlspecialchars($emp['email']) ?></div>
+                                                    <div style="font-weight: 600;"><?= htmlspecialchars($emp['name']) ?>
+                                                    </div>
+                                                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                        <?= htmlspecialchars($emp['email']) ?></div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
-                                            <span class="role-badge <?= $emp['role'] ?>" style="font-size: 0.7rem; padding: 2px 8px;">
+                                            <span class="role-badge <?= $emp['role'] ?>"
+                                                style="font-size: 0.7rem; padding: 2px 8px;">
                                                 <?= strtoupper($emp['role']) ?>
                                             </span>
                                             <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
@@ -286,10 +561,13 @@ include __DIR__ . '/includes/header.php';
                                         </td>
                                         <td>
                                             <?php if ($emp['id'] !== $currentUser['id']): ?>
-                                                <form action="actions/employee_action.php" method="POST" onsubmit="return confirm('Are you sure you want to remove this employee account?');" style="display: inline;">
+                                                <form action="actions/employee_action.php" method="POST"
+                                                    onsubmit="return confirm('Are you sure you want to remove this employee account?');"
+                                                    style="display: inline;">
                                                     <input type="hidden" name="action" value="delete_employee">
                                                     <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
-                                                    <button type="submit" class="btn btn-secondary btn-sm" style="color: #ef4444; padding: 4px 8px;" title="Delete">
+                                                    <button type="submit" class="btn btn-secondary btn-sm"
+                                                        style="color: #ef4444; padding: 4px 8px;" title="Delete">
                                                         <i class="fa-regular fa-trash-can"></i>
                                                     </button>
                                                 </form>
@@ -321,12 +599,17 @@ include __DIR__ . '/includes/header.php';
                                 No attendance records logged today yet.
                             </p>
                         <?php else: ?>
-                            <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
+                            <div
+                                style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
                                 <?php foreach ($todayAttendance as $att): ?>
-                                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                    <div
+                                        style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
                                         <div>
-                                            <strong style="font-size: 0.875rem;"><?= htmlspecialchars($att['employee_name']) ?></strong>
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);">In: <?= formatTime($att['clock_in']) ?> <?= $att['clock_out'] ? '• Out: ' . formatTime($att['clock_out']) : '' ?></div>
+                                            <strong
+                                                style="font-size: 0.875rem;"><?= htmlspecialchars($att['employee_name']) ?></strong>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">In:
+                                                <?= formatTime($att['clock_in']) ?>
+                                                <?= $att['clock_out'] ? '• Out: ' . formatTime($att['clock_out']) : '' ?></div>
                                         </div>
                                         <span class="status-pill <?= $att['status'] ?>"><?= ucfirst($att['status']) ?></span>
                                     </div>
@@ -347,19 +630,25 @@ include __DIR__ . '/includes/header.php';
                             </button>
                         </div>
 
-                        <div style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 280px; overflow-y: auto;">
+                        <div
+                            style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 280px; overflow-y: auto;">
                             <?php foreach ($announcements as $ann): ?>
-                                <div style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff;">
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
+                                <div
+                                    style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff;">
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
                                         <strong style="font-size: 0.9rem;"><?= htmlspecialchars($ann['title']) ?></strong>
-                                        <span class="status-pill <?= $ann['category'] === 'urgent' ? 'rejected' : ($ann['category'] === 'event' ? 'on_leave' : 'active') ?>" style="font-size: 0.65rem;">
+                                        <span
+                                            class="status-pill <?= $ann['category'] === 'urgent' ? 'rejected' : ($ann['category'] === 'event' ? 'on_leave' : 'active') ?>"
+                                            style="font-size: 0.65rem;">
                                             <?= ucfirst($ann['category']) ?>
                                         </span>
                                     </div>
                                     <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.4rem;">
                                         <?= nl2br(htmlspecialchars($ann['content'])) ?>
                                     </p>
-                                    <div style="display: flex; justify-content: space-between; font-size: 0.725rem; color: var(--text-light);">
+                                    <div
+                                        style="display: flex; justify-content: space-between; font-size: 0.725rem; color: var(--text-light);">
                                         <span>By <?= htmlspecialchars($ann['author_name']) ?></span>
                                         <span><?= formatNiceDate($ann['created_at']) ?></span>
                                     </div>
@@ -384,12 +673,14 @@ include __DIR__ . '/includes/header.php';
 
                         <div class="form-group">
                             <label class="form-label">Full Name *</label>
-                            <input type="text" name="name" class="form-control" placeholder="e.g. Rachel Adams" required>
+                            <input type="text" name="name" class="form-control" placeholder="e.g. Rachel Adams"
+                                required>
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">Email Address *</label>
-                            <input type="email" name="email" class="form-control" placeholder="rachel@dayflow.com" required>
+                            <input type="email" name="email" class="form-control" placeholder="rachel@dayflow.com"
+                                required>
                         </div>
 
                         <div class="grid-2">
@@ -415,7 +706,8 @@ include __DIR__ . '/includes/header.php';
                         <div class="grid-2">
                             <div class="form-group">
                                 <label class="form-label">Designation</label>
-                                <input type="text" name="designation" class="form-control" placeholder="e.g. Frontend Engineer">
+                                <input type="text" name="designation" class="form-control"
+                                    placeholder="e.g. Frontend Engineer">
                             </div>
 
                             <div class="form-group">
@@ -457,7 +749,8 @@ include __DIR__ . '/includes/header.php';
 
                         <div class="form-group">
                             <label class="form-label">Announcement Title *</label>
-                            <input type="text" name="title" class="form-control" placeholder="e.g. Holiday Schedule Announcement" required>
+                            <input type="text" name="title" class="form-control"
+                                placeholder="e.g. Holiday Schedule Announcement" required>
                         </div>
 
                         <div class="form-group">
@@ -472,7 +765,8 @@ include __DIR__ . '/includes/header.php';
 
                         <div class="form-group">
                             <label class="form-label">Message Content *</label>
-                            <textarea name="content" class="form-control" rows="4" placeholder="Write announcement details for all team members..." required></textarea>
+                            <textarea name="content" class="form-control" rows="4"
+                                placeholder="Write announcement details for all team members..." required></textarea>
                         </div>
 
                         <button type="submit" class="btn btn-primary" style="width: 100%;">
