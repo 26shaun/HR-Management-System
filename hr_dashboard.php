@@ -341,7 +341,7 @@ include __DIR__ . '/includes/header.php';
                     <span class="status-pill pending"><?= $pendingLeaves ?> Pending Review</span>
                 </div>
 
-                <<div class="table-responsive">
+                <div class="table-responsive">
                     <table class="custom-table">
                         <thead>
                             <tr>
@@ -469,38 +469,90 @@ include __DIR__ . '/includes/header.php';
                                                         </button>
                                                     </form>
 
-                                                    <!-- Reject form -->
-                                                    <form action="actions/leave_action.php" method="POST">
-                                                        <input type="hidden" name="action" value="review_leave">
+                                                
+                                                   <!-- Reject button -->
+<div>
+    <button
+        type="button"
+        class="btn btn-danger btn-sm"
+        onclick="toggleRejectForm(<?= (int)$l['id'] ?>)"
+    >
+        <i class="fa-solid fa-xmark"></i>
+        Reject
+    </button>
 
-                                                        <input type="hidden" name="leave_id" value="<?= (int) $l['id'] ?>">
+    <!-- Rejection comment form -->
+    <form
+        id="rejectForm<?= (int)$l['id'] ?>"
+        action="actions/leave_action.php"
+        method="POST"
+        style="
+            display: none;
+            margin-top: 0.6rem;
+            min-width: 230px;
+        "
+    >
+        <input
+            type="hidden"
+            name="action"
+            value="review_leave"
+        >
 
-                                                        <input type="hidden" name="status" value="rejected">
+        <input
+            type="hidden"
+            name="leave_id"
+            value="<?= (int)$l['id'] ?>"
+        >
 
-                                                        <input type="hidden" name="review_comment" value="Declined by HR.">
+        <input
+            type="hidden"
+            name="status"
+            value="rejected"
+        >
 
-                                                        <button type="submit" class="btn btn-danger btn-sm" title="Reject">
-                                                            <i class="fa-solid fa-xmark"></i>
-                                                            Reject
-                                                        </button>
+        <textarea
+            name="review_comment"
+            class="form-control"
+            rows="3"
+            placeholder="Enter the reason for rejecting this leave"
+            required
+            minlength="5"
+            style="margin-bottom: 0.5rem;"
+        ></textarea>
+
+        <div style="display: flex; gap: 0.4rem;">
+            <button
+                type="submit"
+                class="btn btn-danger btn-sm"
+            >
+                Confirm rejection
+            </button>
+
+            <button
+                type="button"
+                class="btn btn-secondary btn-sm"
+                onclick="toggleRejectForm(<?= (int)$l['id'] ?>)"
+            >
+                Cancel
+            </button>
+        </div>
                                                     </form>
                                                 </div>
-                                            <?php else: ?>
-                                                <span style="font-size: 0.8rem; color: var(--text-muted);">
-                                                    Reviewed by
-                                                    <?= htmlspecialchars(
-                                                        $l['reviewer_name'] ?? 'HR'
-                                                    ) ?>
-                                                </span>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+                                            </div>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.8rem; color: var(--text-muted);">
+                                                Reviewed by <?= htmlspecialchars($l['reviewer_name'] ?? 'HR') ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
             </div>
+        </div>
+
             <div class="grid-3">
                 <!-- Employee Directory -->
                 <div class="card" id="employeesSection">
@@ -774,5 +826,25 @@ include __DIR__ . '/includes/header.php';
                 </div>
             </div>
         </div>
+
+        <script>
+            function toggleRejectForm(leaveId) {
+                const form = document.getElementById('rejectForm' + leaveId);
+
+                if (!form) {
+                    return;
+                }
+
+                const isHidden = form.style.display === 'none' || form.style.display === '';
+                form.style.display = isHidden ? 'block' : 'none';
+
+                if (isHidden) {
+                    const commentBox = form.querySelector('textarea[name="review_comment"]');
+                    if (commentBox) {
+                        commentBox.focus();
+                    }
+                }
+            }
+        </script>
 
         <?php include __DIR__ . '/includes/footer.php'; ?>
