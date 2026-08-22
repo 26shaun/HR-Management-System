@@ -12,8 +12,8 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $today = date('Y-m-d');
 $nowTime = date('H:i:s');
 
-// Four hours minimum work requirement in seconds
-$minimumWorkSeconds = 4 * 60 * 60;
+// Employees and HR must work at least six hours before checking out.
+$minimumWorkSeconds = 6 * 60 * 60;
 
 // Return HR users to HR dashboard
 $dashboardPage = isHR()
@@ -125,13 +125,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $currentTimestamp = strtotime($today . ' ' . $nowTime);
         $workedSeconds = max(0, $currentTimestamp - $checkInTimestamp);
+
+        // Enforce the six-hour rule on the server. Hiding or enabling the
+        // dashboard button must never be the only protection.
+        if ($workedSeconds < $minimumWorkSeconds) {
+            $remainingSeconds = $minimumWorkSeconds - $workedSeconds;
+            $remainingHours = intdiv($remainingSeconds, 3600);
+            $remainingMinutes = (int) ceil(($remainingSeconds % 3600) / 60);
+
+            // Avoid displaying "60 minutes" after rounding.
+            if ($remainingMinutes === 60) {
+                $remainingHours++;
+                $remainingMinutes = 0;
+            }
+
+            $remainingText = [];
+            if ($remainingHours > 0) {
+                $remainingText[] = $remainingHours .
+                    ($remainingHours === 1 ? ' hour' : ' hours');
+            }
+            if ($remainingMinutes > 0) {
+                $remainingText[] = $remainingMinutes .
+                    ($remainingMinutes === 1 ? ' minute' : ' minutes');
+            }
+
+            $_SESSION['flash_error'] =
+                "Checkout is available only after completing 6 hours. " .
+                "Please wait " . implode(' and ', $remainingText) . ".";
+
+            header("Location: " . $dashboardPage);
+            exit;
+        }
+
         $totalHours = round($workedSeconds / 3600, 2);
 
-        // Auto-determine status: if worked less than 4 hours, record as half_day
+        // Preserve the check-in status after the minimum shift is completed.
         $finalStatus = $existingAttendance['status'] ?? 'present';
-        if ($workedSeconds < (4 * 3600)) {
-            $finalStatus = 'half_day';
-        }
 
         $updateStatement = $db->prepare("
             UPDATE attendance
@@ -149,11 +178,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existingAttendance['id']
         ]);
 
-        if ($finalStatus === 'half_day') {
-            $_SESSION['flash_warning'] = "Checked out at " . formatTime($nowTime) . " (Worked " . $totalHours . " hrs - Recorded as Half-Day).";
-        } else {
-            $_SESSION['flash_success'] = "Checked out successfully at " . formatTime($nowTime) . ". Total shift time logged: " . $totalHours . " hrs.";
-        }
+        $_SESSION['flash_success'] =
+            "Checked out successfully at " . formatTime($nowTime) .
+            ". Total shift time logged: " . $totalHours . " hrs.";
 
         header("Location: " . $dashboardPage);
         exit;
