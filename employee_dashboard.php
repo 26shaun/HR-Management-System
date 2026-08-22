@@ -40,6 +40,12 @@ $announcementsStmt = $db->query("
 ");
 $announcements = $announcementsStmt->fetchAll();
 
+// 5. Fetch User Notifications
+$myNotifications = getUserNotifications($userId, 10);
+
+// 6. Fetch Paid vs Unpaid Leave Allowance Balance
+$leaveBalance = getUserLeaveBalance($userId);
+
 // 5. Metrics calculation
 $leavesTakenCount = 0;
 $pendingLeavesCount = 0;
@@ -176,45 +182,45 @@ include __DIR__ . '/includes/header.php';
                 </div>
             </div>
 
-            <!-- Stat Metric Cards -->
+            <!-- Stat Metric Cards & Leave Allowance Overview -->
             <div class="stat-grid">
                 <div class="stat-card">
                     <div class="stat-icon-wrapper green">
-                        <i class="fa-solid fa-calendar-days"></i>
+                        <i class="fa-solid fa-umbrella-beach"></i>
                     </div>
                     <div class="stat-details">
-                        <div class="stat-number"><?= $presentDaysThisMonth ?></div>
-                        <div class="stat-title">Recent Days Logged</div>
+                        <div class="stat-number"><?= $leaveBalance['paid_remaining'] ?> <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">/ <?= $leaveBalance['total_allowance'] ?> Days</span></div>
+                        <div class="stat-title">Remaining Paid Leave Balance</div>
                     </div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-icon-wrapper amber">
-                        <i class="fa-solid fa-hourglass-half"></i>
+                        <i class="fa-solid fa-calculator"></i>
                     </div>
                     <div class="stat-details">
-                        <div class="stat-number"><?= $pendingLeavesCount ?></div>
-                        <div class="stat-title">Pending Leave Requests</div>
+                        <div class="stat-number"><?= $leaveBalance['unpaid_used'] ?> <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">Days</span></div>
+                        <div class="stat-title">Unpaid Leave / Loss of Pay (LWP)</div>
                     </div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-icon-wrapper purple">
-                        <i class="fa-solid fa-umbrella-beach"></i>
+                        <i class="fa-solid fa-hourglass-half"></i>
                     </div>
                     <div class="stat-details">
-                        <div class="stat-number"><?= $leavesTakenCount ?></div>
-                        <div class="stat-title">Days On Leave Approved</div>
+                        <div class="stat-number"><?= $pendingLeavesCount ?></div>
+                        <div class="stat-title">Pending Leave Applications</div>
                     </div>
                 </div>
 
                 <div class="stat-card">
                     <div class="stat-icon-wrapper blue">
-                        <i class="fa-solid fa-building"></i>
+                        <i class="fa-solid fa-calendar-check"></i>
                     </div>
                     <div class="stat-details">
-                        <div class="stat-number" style="font-size: 1.15rem; font-weight: 700;"><?= htmlspecialchars($currentUser['department_name'] ?? 'General') ?></div>
-                        <div class="stat-title">My Department</div>
+                        <div class="stat-number"><?= $presentDaysThisMonth ?></div>
+                        <div class="stat-title">Recent Days Logged</div>
                     </div>
                 </div>
             </div>
@@ -238,6 +244,7 @@ include __DIR__ . '/includes/header.php';
                             <thead>
                                 <tr>
                                     <th>Leave Type</th>
+                                    <th>Category</th>
                                     <th>Dates</th>
                                     <th>Days</th>
                                     <th>Reason</th>
@@ -247,14 +254,30 @@ include __DIR__ . '/includes/header.php';
                             <tbody>
                                 <?php if (empty($myLeaves)): ?>
                                     <tr>
-                                        <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                        <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">
                                             You haven't requested any leaves yet.
                                         </td>
                                     </tr>
                                 <?php else: ?>
                                     <?php foreach ($myLeaves as $l): ?>
+                                        <?php $isPaidLeave = ($l['leave_category'] ?? ($l['is_paid'] ?? 1) == 1) === 'paid' || ($l['is_paid'] ?? 1) == 1; ?>
                                         <tr>
                                             <td><strong><?= htmlspecialchars($l['leave_type']) ?></strong></td>
+                                            <td>
+                                                <?php if ($l['status'] === 'pending'): ?>
+                                                    <span class="status-pill pending" style="font-size: 0.7rem; padding: 2px 7px;">
+                                                        <i class="fa-solid fa-hourglass-half"></i> Pending HR Review
+                                                    </span>
+                                                <?php elseif ($isPaidLeave): ?>
+                                                    <span class="status-pill present" style="font-size: 0.7rem; padding: 2px 7px;">
+                                                        <i class="fa-solid fa-circle-check"></i> Paid Leave
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="status-pill pending" style="font-size: 0.7rem; padding: 2px 7px; background: rgba(245, 158, 11, 0.15); color: #b45309;">
+                                                        <i class="fa-solid fa-coins"></i> Unpaid (LWP)
+                                                    </span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td>
                                                 <?= formatNiceDate($l['start_date']) ?> - <?= formatNiceDate($l['end_date']) ?>
                                             </td>
@@ -277,8 +300,54 @@ include __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
-                <!-- Company Announcements & Attendance Log -->
+                <!-- Company Announcements & Notifications -->
                 <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <!-- My In-Website Notifications Card -->
+                    <div class="card" id="notificationsSection">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-bell" style="color: var(--primary);"></i>
+                                My Notifications
+                            </div>
+                            <?php if (!empty($myNotifications)): ?>
+                                <form action="actions/notification_action.php" method="POST" style="margin: 0;">
+                                    <input type="hidden" name="action" value="mark_all_read">
+                                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;">
+                                        Mark All Read
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
+                            <?php if (empty($myNotifications)): ?>
+                                <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">
+                                    <i class="fa-regular fa-bell-slash" style="font-size: 1.5rem; opacity: 0.4; margin-bottom: 0.35rem; display: block;"></i>
+                                    No notifications yet
+                                </div>
+                            <?php else: ?>
+                                <?php foreach ($myNotifications as $n): ?>
+                                    <div style="padding: 0.75rem 0.85rem; border: 1px solid <?= $n['is_read'] ? 'var(--border-color)' : 'rgba(99, 102, 241, 0.3)' ?>; border-radius: var(--radius-md); background: <?= $n['is_read'] ? '#ffffff' : 'rgba(99, 102, 241, 0.05)' ?>; position: relative;">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+                                            <strong style="font-size: 0.85rem; color: var(--text-main); font-weight: <?= $n['is_read'] ? '600' : '700' ?>;">
+                                                <?= htmlspecialchars($n['title']) ?>
+                                            </strong>
+                                            <?php if (!$n['is_read']): ?>
+                                                <span class="status-pill pending" style="font-size: 0.6rem; padding: 1px 6px;">New</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; line-height: 1.4;">
+                                            <?= htmlspecialchars($n['message']) ?>
+                                        </p>
+                                        <div style="font-size: 0.7rem; color: var(--text-light); text-align: right;">
+                                            <?= formatNiceDate($n['created_at']) ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
                     <!-- Announcements -->
                     <div class="card" id="companyFeed">
                         <div class="card-header">
@@ -349,6 +418,17 @@ include __DIR__ . '/includes/header.php';
                     <button class="modal-close-btn" onclick="closeModal('applyLeaveModal')">&times;</button>
                 </div>
                 <div class="modal-body">
+                    <!-- Balance Summary Badge -->
+                    <div style="padding: 0.85rem 1rem; background: rgba(99, 102, 241, 0.08); border-radius: var(--radius-md); border: 1px solid rgba(99, 102, 241, 0.2); margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">PAID LEAVE ALLOWANCE</div>
+                            <div style="font-size: 0.95rem; font-weight: 700; color: var(--primary);">
+                                <?= $leaveBalance['paid_remaining'] ?> of <?= $leaveBalance['total_allowance'] ?> Days Remaining
+                            </div>
+                        </div>
+                        <span class="status-pill present" style="font-size: 0.7rem;"><?= $leaveBalance['paid_used'] ?> Days Used</span>
+                    </div>
+
                     <form action="actions/leave_action.php" method="POST">
                         <input type="hidden" name="action" value="apply_leave">
 
@@ -358,6 +438,7 @@ include __DIR__ . '/includes/header.php';
                                 <option value="Casual Leave">Casual Leave</option>
                                 <option value="Sick Leave">Sick Leave</option>
                                 <option value="Annual Leave">Annual Vacation Leave</option>
+                                <option value="Maternity/Paternity">Maternity/Paternity</option>
                                 <option value="Emergency">Emergency Leave</option>
                             </select>
                         </div>
