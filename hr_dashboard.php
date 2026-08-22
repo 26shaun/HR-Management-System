@@ -54,16 +54,69 @@ $leavesStmt = $db->query("
 ");
 $leaves = $leavesStmt->fetchAll();
 
-// 4. Fetch Today's Attendance
-$attendanceStmt = $db->query("
+// 4. Fetch Attendance Logs with Filters
+$hasAttFilter = isset($_GET['att_filter_applied']) || isset($_GET['att_date_from']) || isset($_GET['att_search']) || isset($_GET['att_dept']) || isset($_GET['att_status']);
+
+$attDateFrom = isset($_GET['att_date_from']) ? trim($_GET['att_date_from']) : ($hasAttFilter ? '' : $today);
+$attDateTo = isset($_GET['att_date_to']) ? trim($_GET['att_date_to']) : ($hasAttFilter ? '' : $today);
+$attSearch = trim($_GET['att_search'] ?? '');
+$attDept = trim($_GET['att_dept'] ?? '');
+$attStatus = trim($_GET['att_status'] ?? '');
+
+$attWhere = [];
+$attParams = [];
+
+if ($attDateFrom !== '') {
+    $attWhere[] = "a.date >= ?";
+    $attParams[] = $attDateFrom;
+}
+if ($attDateTo !== '') {
+    $attWhere[] = "a.date <= ?";
+    $attParams[] = $attDateTo;
+}
+if ($attSearch !== '') {
+    $attWhere[] = "(u.name LIKE ? OR u.email LIKE ?)";
+    $attParams[] = "%$attSearch%";
+    $attParams[] = "%$attSearch%";
+}
+if ($attDept !== '') {
+    $attWhere[] = "u.department_id = ?";
+    $attParams[] = $attDept;
+}
+if ($attStatus !== '') {
+    $attWhere[] = "a.status = ?";
+    $attParams[] = $attStatus;
+}
+
+$attWhereClause = !empty($attWhere) ? "WHERE " . implode(" AND ", $attWhere) : "";
+
+$attendanceStmt = $db->prepare("
     SELECT a.*, u.name AS employee_name, u.email AS employee_email, d.name AS department_name
     FROM attendance a
     JOIN users u ON a.user_id = u.id
     LEFT JOIN departments d ON u.department_id = d.id
-    WHERE a.date = '$today'
-    ORDER BY a.clock_in DESC
+    $attWhereClause
+    ORDER BY a.date DESC, a.clock_in DESC
 ");
-$todayAttendance = $attendanceStmt->fetchAll();
+$attendanceStmt->execute($attParams);
+$attendanceLogs = $attendanceStmt->fetchAll();
+$todayAttendance = $attendanceLogs;
+
+// Filter summary counts
+$attStats = [
+    'total' => count($attendanceLogs),
+    'present' => 0,
+    'late' => 0,
+    'half_day' => 0,
+    'on_leave' => 0,
+    'absent' => 0
+];
+foreach ($attendanceLogs as $log) {
+    $st = strtolower($log['status'] ?? 'present');
+    if (isset($attStats[$st])) {
+        $attStats[$st]++;
+    }
+}
 
 // 5. Fetch Announcements
 $announcementsStmt = $db->query("
@@ -646,40 +699,6 @@ include __DIR__ . '/includes/header.php';
 
                 <!-- Today's Attendance Feed & Announcements -->
                 <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                    <!-- Attendance Card -->
-                    <div class="card" id="attendanceSection">
-                        <div class="card-header">
-                            <div class="card-title">
-                                <i class="fa-solid fa-clock" style="color: var(--primary);"></i>
-                                Today's Attendance Log
-                            </div>
-                            <span class="status-pill present"><?= count($todayAttendance) ?> Logged</span>
-                        </div>
-
-                        <?php if (empty($todayAttendance)): ?>
-                            <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1rem 0;">
-                                No attendance records logged today yet.
-                            </p>
-                        <?php else: ?>
-                            <div
-                                style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
-                                <?php foreach ($todayAttendance as $att): ?>
-                                    <div
-                                        style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                                        <div>
-                                            <strong
-                                                style="font-size: 0.875rem;"><?= htmlspecialchars($att['employee_name']) ?></strong>
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);">In:
-                                                <?= formatTime($att['clock_in']) ?>
-                                                <?= $att['clock_out'] ? '• Out: ' . formatTime($att['clock_out']) : '' ?></div>
-                                        </div>
-                                        <span class="status-pill <?= $att['status'] ?>"><?= ucfirst($att['status']) ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-
                     <!-- Announcements Card -->
                     <div class="card" id="announcementsSection">
                         <div class="card-header">
@@ -718,6 +737,192 @@ include __DIR__ . '/includes/header.php';
                             <?php endforeach; ?>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Attendance Logs & Filter Center Section -->
+            <div class="card" id="attendanceSection" style="margin-top: 2rem; margin-bottom: 2rem;">
+                <div class="card-header" style="flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center;">
+                    <div class="card-title">
+                        <i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i>
+                        Attendance Logs & Workforce Tracker
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                        <span class="status-pill active" style="font-weight: 600; font-size: 0.8rem;">
+                            <i class="fa-solid fa-list-check"></i> <?= $attStats['total'] ?> Log(s) Found
+                        </span>
+                        <span class="status-pill present" style="font-size: 0.8rem;">
+                            <i class="fa-solid fa-user-check"></i> <?= $attStats['present'] ?> Present
+                        </span>
+                        <span class="status-pill late" style="font-size: 0.8rem; background: #fef3c7; color: #d97706; border: 1px solid #fde68a;">
+                            <i class="fa-solid fa-clock"></i> <?= $attStats['late'] ?> Late
+                        </span>
+                        <?php if ($attStats['half_day'] > 0): ?>
+                            <span class="status-pill pending" style="font-size: 0.8rem;">
+                                <i class="fa-solid fa-business-time"></i> <?= $attStats['half_day'] ?> Half Day
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Attendance Filters Form -->
+                <form method="GET" action="hr_dashboard.php#attendanceSection" style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1.25rem; margin-bottom: 1.5rem;">
+                    <input type="hidden" name="att_filter_applied" value="1">
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; align-items: end;">
+                        <!-- Search Employee -->
+                        <div>
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                                <i class="fa-solid fa-magnifying-glass"></i> Search Employee
+                            </label>
+                            <input type="text" id="attSearchInput" name="att_search" class="form-control" placeholder="Name or email..." value="<?= htmlspecialchars($attSearch) ?>">
+                        </div>
+
+                        <!-- Date From -->
+                        <div>
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                                <i class="fa-regular fa-calendar"></i> Date From
+                            </label>
+                            <input type="date" name="att_date_from" class="form-control" value="<?= htmlspecialchars($attDateFrom) ?>">
+                        </div>
+
+                        <!-- Date To -->
+                        <div>
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                                <i class="fa-regular fa-calendar-check"></i> Date To
+                            </label>
+                            <input type="date" name="att_date_to" class="form-control" value="<?= htmlspecialchars($attDateTo) ?>">
+                        </div>
+
+                        <!-- Department Filter -->
+                        <div>
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                                <i class="fa-solid fa-building"></i> Department
+                            </label>
+                            <select name="att_dept" class="form-control">
+                                <option value="">All Departments</option>
+                                <?php foreach ($departments as $d): ?>
+                                    <option value="<?= $d['id'] ?>" <?= $attDept == $d['id'] ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars($d['name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div>
+                            <label style="display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem;">
+                                <i class="fa-solid fa-filter"></i> Status
+                            </label>
+                            <select name="att_status" class="form-control">
+                                <option value="">All Statuses</option>
+                                <option value="present" <?= $attStatus === 'present' ? 'selected' : '' ?>>Present</option>
+                                <option value="late" <?= $attStatus === 'late' ? 'selected' : '' ?>>Late</option>
+                                <option value="half_day" <?= $attStatus === 'half_day' ? 'selected' : '' ?>>Half Day</option>
+                                <option value="absent" <?= $attStatus === 'absent' ? 'selected' : '' ?>>Absent</option>
+                                <option value="on_leave" <?= $attStatus === 'on_leave' ? 'selected' : '' ?>>On Leave</option>
+                            </select>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">
+                                <i class="fa-solid fa-filter"></i> Filter
+                            </button>
+                            <a href="hr_dashboard.php#attendanceSection" class="btn btn-secondary" title="Reset Filters">
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Quick Filter Actions -->
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-muted);">
+                        <span style="font-weight: 600;">Quick Filters:</span>
+                        <a href="hr_dashboard.php?att_filter_applied=1&att_date_from=<?= $today ?>&att_date_to=<?= $today ?>#attendanceSection" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 3px 10px;">Today</a>
+                        <a href="hr_dashboard.php?att_filter_applied=1&att_date_from=<?= date('Y-m-d', strtotime('-1 day')) ?>&att_date_to=<?= date('Y-m-d', strtotime('-1 day')) ?>#attendanceSection" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 3px 10px;">Yesterday</a>
+                        <a href="hr_dashboard.php?att_filter_applied=1&att_date_from=<?= date('Y-m-01') ?>&att_date_to=<?= date('Y-m-t') ?>#attendanceSection" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 3px 10px;">This Month</a>
+                        <a href="hr_dashboard.php?att_filter_applied=1&att_date_from=&att_date_to=#attendanceSection" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 3px 10px;">All Dates</a>
+                    </div>
+                </form>
+
+                <!-- Attendance Log Table -->
+                <div class="table-responsive">
+                    <table class="custom-table" id="attendanceLogsTable">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Department</th>
+                                <th>Date</th>
+                                <th>Clock In</th>
+                                <th>Clock Out</th>
+                                <th>Total Hours</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($attendanceLogs)): ?>
+                                <tr>
+                                    <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                                        <i class="fa-regular fa-calendar-xmark" style="font-size: 1.5rem; display: block; margin-bottom: 0.5rem; color: var(--text-light);"></i>
+                                        No attendance records match your filter criteria.
+                                    </td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($attendanceLogs as $att): ?>
+                                    <tr>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                                <div class="user-mini-avatar" style="width: 32px; height: 32px; font-size: 0.8rem; background: var(--primary-gradient); color: #ffffff;">
+                                                    <?= strtoupper(substr($att['employee_name'], 0, 1)) ?>
+                                                </div>
+                                                <div>
+                                                    <div style="font-weight: 600; color: var(--text-main);">
+                                                        <?= htmlspecialchars($att['employee_name']) ?>
+                                                    </div>
+                                                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                        <?= htmlspecialchars($att['employee_email']) ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td><?= htmlspecialchars($att['department_name'] ?? 'Unassigned') ?></td>
+                                        <td>
+                                            <strong><?= formatNiceDate($att['date']) ?></strong>
+                                        </td>
+                                        <td>
+                                            <span style="font-weight: 600; color: var(--success);">
+                                                <i class="fa-solid fa-arrow-right-to-bracket"></i> <?= formatTime($att['clock_in']) ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <?php if (!empty($att['clock_out'])): ?>
+                                                <span style="font-weight: 600; color: var(--danger);">
+                                                    <i class="fa-solid fa-arrow-right-from-bracket"></i> <?= formatTime($att['clock_out']) ?>
+                                                </span>
+                                            <?php else: ?>
+                                                <span style="font-size: 0.8rem; color: var(--warning); font-style: italic;">Active Session</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <strong><?= number_format((float)($att['total_hours'] ?? 0), 2) ?> hrs</strong>
+                                        </td>
+                                        <td>
+                                            <?php 
+                                                $stClass = strtolower($att['status']);
+                                                if ($stClass === 'late') $stClass = 'rejected';
+                                                elseif ($stClass === 'half_day') $stClass = 'pending';
+                                            ?>
+                                            <span class="status-pill <?= $stClass ?>">
+                                                <?= ucfirst(str_replace('_', ' ', $att['status'])) ?>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
                 </div>
             </div>
         </main>
@@ -985,5 +1190,24 @@ function prepareRejection(form) {
 
     return true;
 }
+<<<<<<< HEAD
+=======
+
+// Live client-side filter for Attendance Search Input
+document.addEventListener('DOMContentLoaded', function() {
+    const attSearchInput = document.getElementById('attSearchInput');
+    const attTable = document.getElementById('attendanceLogsTable');
+    if (attSearchInput && attTable) {
+        attSearchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            const rows = attTable.querySelectorAll('tbody tr');
+            rows.forEach(function(row) {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        });
+    }
+});
+>>>>>>> 3b12725327caedec39b9179a32212af7145c6f9f
 </script>
         <?php include __DIR__ . '/includes/footer.php'; ?>
