@@ -24,6 +24,7 @@ $hrAttendanceStatement->execute([
 ]);
 
 $hrTodayAttendance = $hrAttendanceStatement->fetch();
+
 // 1. Fetch Metrics
 $totalEmployees = $db->query("SELECT COUNT(*) FROM users WHERE role = 'employee'")->fetchColumn();
 $presentToday = $db->query("SELECT COUNT(DISTINCT user_id) FROM attendance WHERE date = '$today'")->fetchColumn();
@@ -32,55 +33,107 @@ $totalDepartments = $db->query("SELECT COUNT(*) FROM departments")->fetchColumn(
 
 // 2. Fetch Employees
 $employeesStmt = $db->query("
-    SELECT u.*, d.name AS department_name 
-    FROM users u 
-    LEFT JOIN departments d ON u.department_id = d.id 
+    SELECT u.*, d.name AS department_name
+    FROM users u
+    LEFT JOIN departments d ON u.department_id = d.id
     ORDER BY u.id DESC
 ");
+<<<<<<< HEAD
+
+$employees = $employeesStmt ? $employeesStmt->fetchAll() : [];
+=======
 $employees = $employeesStmt->fetchAll();
+foreach ($employees as &$emp) {
+    $emp['leave_balance'] = getUserLeaveBalance($emp['id']);
+    
+    // Fetch last 15 attendance logs for this employee
+    $attHStmt = $db->prepare("SELECT * FROM attendance WHERE user_id = ? ORDER BY date DESC LIMIT 15");
+    $attHStmt->execute([$emp['id']]);
+    $attLogs = $attHStmt->fetchAll();
+    foreach ($attLogs as &$al) {
+        $al['formatted_date'] = date('D, M d, Y', strtotime($al['date']));
+        $al['formatted_in'] = formatTime($al['clock_in']);
+        $al['formatted_out'] = $al['clock_out'] ? formatTime($al['clock_out']) : 'In Progress';
+    }
+    unset($al);
+    $emp['attendance_history'] = $attLogs;
+}
+unset($emp);
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
 
 // 3. Fetch Pending & Recent Leaves
 $leavesStmt = $db->query("
-    SELECT l.*, u.name AS employee_name, u.email AS employee_email, d.name AS department_name, r.name AS reviewer_name
+    SELECT l.*, 
+           u.name AS employee_name, 
+           u.email AS employee_email, 
+           d.name AS department_name, 
+           r.name AS reviewer_name
     FROM leaves l
     JOIN users u ON l.user_id = u.id
     LEFT JOIN departments d ON u.department_id = d.id
     LEFT JOIN users r ON l.reviewed_by = r.id
-    ORDER BY CASE WHEN l.status = 'pending' THEN 1 ELSE 2 END, l.created_at DESC
+    ORDER BY CASE WHEN l.status = 'pending' THEN 1 ELSE 2 END, 
+             l.created_at DESC
 ");
+
 $leaves = $leavesStmt->fetchAll();
 
 // 4. Fetch Today's Attendance
 $attendanceStmt = $db->query("
-    SELECT a.*, u.name AS employee_name, u.email AS employee_email, d.name AS department_name
+    SELECT a.*, 
+           u.name AS employee_name, 
+           u.email AS employee_email, 
+           d.name AS department_name
     FROM attendance a
     JOIN users u ON a.user_id = u.id
     LEFT JOIN departments d ON u.department_id = d.id
     WHERE a.date = '$today'
     ORDER BY a.clock_in DESC
 ");
+
 $todayAttendance = $attendanceStmt->fetchAll();
+
+// 4b. Fetch Weekly Attendance (All Employees for current week Mon-Sun)
+$mondayThisWeek = date('Y-m-d', strtotime('monday this week'));
+$sundayThisWeek = date('Y-m-d', strtotime('sunday this week'));
+$weeklyAttendanceStmt = $db->query("
+    SELECT a.*, u.name AS employee_name, u.email AS employee_email, d.name AS department_name
+    FROM attendance a
+    JOIN users u ON a.user_id = u.id
+    LEFT JOIN departments d ON u.department_id = d.id
+    WHERE a.date BETWEEN '$mondayThisWeek' AND '$sundayThisWeek'
+    ORDER BY a.date DESC, a.clock_in DESC
+");
+$weeklyAttendance = $weeklyAttendanceStmt->fetchAll();
 
 // 5. Fetch Announcements
 $announcementsStmt = $db->query("
-    SELECT a.*, u.name AS author_name 
-    FROM announcements a 
-    JOIN users u ON a.created_by = u.id 
+    SELECT a.*, u.name AS author_name
+    FROM announcements a
+    JOIN users u ON a.created_by = u.id
     ORDER BY a.created_at DESC
 ");
+
 $announcements = $announcementsStmt->fetchAll();
 
 // 6. Fetch Departments for dropdown
-$deptStmt = $db->query("SELECT id, name FROM departments ORDER BY name ASC");
+$deptStmt = $db->query("
+    SELECT id, name 
+    FROM departments 
+    ORDER BY name ASC
+");
+
 $departments = $deptStmt->fetchAll();
 
 $flashSuccess = $_SESSION['flash_success'] ?? null;
 $flashError = $_SESSION['flash_error'] ?? null;
+$flashWarning = $_SESSION['flash_warning'] ?? null;
 $flashInfo = $_SESSION['flash_info'] ?? null;
 
 unset(
     $_SESSION['flash_success'],
     $_SESSION['flash_error'],
+    $_SESSION['flash_warning'],
     $_SESSION['flash_info']
 );
 
@@ -88,17 +141,28 @@ include __DIR__ . '/includes/header.php';
 ?>
 
 <div class="app-container">
+
     <?php include __DIR__ . '/includes/sidebar.php'; ?>
 
     <div class="main-wrapper">
+
         <?php include __DIR__ . '/includes/navbar.php'; ?>
 
         <main class="content-body">
+
             <!-- Flash Notification Messages -->
+
             <?php if ($flashSuccess): ?>
                 <div class="alert alert-success">
                     <i class="fa-solid fa-circle-check"></i>
                     <span><?= htmlspecialchars($flashSuccess) ?></span>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($flashWarning): ?>
+                <div class="alert alert-warning">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span><?= htmlspecialchars($flashWarning) ?></span>
                 </div>
             <?php endif; ?>
 
@@ -108,242 +172,340 @@ include __DIR__ . '/includes/header.php';
                     <span><?= htmlspecialchars($flashError) ?></span>
                 </div>
             <?php endif; ?>
+
             <?php if ($flashInfo): ?>
-    <div class="alert alert-info">
-        <i class="fa-solid fa-circle-info"></i>
-        <span><?= htmlspecialchars($flashInfo) ?></span>
-    </div>
-<?php endif; ?>
+                <div class="alert alert-info">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span><?= htmlspecialchars($flashInfo) ?></span>
+                </div>
+            <?php endif; ?>
+
 
             <!-- Stat Metric Cards -->
+
             <div class="stat-grid">
+
                 <div class="stat-card">
                     <div class="stat-icon-wrapper purple">
                         <i class="fa-solid fa-users"></i>
                     </div>
+
                     <div class="stat-details">
                         <div class="stat-number"><?= $totalEmployees ?></div>
                         <div class="stat-title">Total Employees</div>
                     </div>
                 </div>
 
+
                 <div class="stat-card">
                     <div class="stat-icon-wrapper green">
                         <i class="fa-solid fa-user-check"></i>
                     </div>
+
                     <div class="stat-details">
                         <div class="stat-number"><?= $presentToday ?></div>
                         <div class="stat-title">Present Today</div>
                     </div>
                 </div>
 
+
                 <div class="stat-card">
                     <div class="stat-icon-wrapper amber">
                         <i class="fa-solid fa-hourglass-half"></i>
                     </div>
+
                     <div class="stat-details">
                         <div class="stat-number"><?= $pendingLeaves ?></div>
                         <div class="stat-title">Pending Leave Approvals</div>
                     </div>
                 </div>
 
+
                 <div class="stat-card">
                     <div class="stat-icon-wrapper blue">
                         <i class="fa-solid fa-sitemap"></i>
                     </div>
+
                     <div class="stat-details">
                         <div class="stat-number"><?= $totalDepartments ?></div>
                         <div class="stat-title">Active Departments</div>
                     </div>
                 </div>
+
             </div>
-<!-- HR Attendance Card -->
-<div class="card" style="margin-bottom: 2rem;">
-    <div class="card-header">
-        <div class="card-title">
-            <i
-                class="fa-solid fa-user-clock"
-                style="color: var(--primary);"
-            ></i>
 
-            My Attendance
-        </div>
 
-        <?php if (!$hrTodayAttendance): ?>
-            <span class="status-pill pending">
-                Not checked in
-            </span>
-        <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
-            <span class="status-pill active">
-                Working
-            </span>
-        <?php else: ?>
-            <span class="status-pill approved">
-                Completed
-            </span>
-        <?php endif; ?>
-    </div>
+            <!-- HR Attendance Card -->
 
-    <div
-        style="
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1.5rem;
-            flex-wrap: wrap;
-            padding: 0.5rem;
-        "
-    >
-        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
-            <div>
-                <div
-                    style="
-                        color: var(--text-muted);
-                        font-size: 0.75rem;
-                        margin-bottom: 0.3rem;
-                    "
-                >
-                    CHECK-IN TIME
+            <div class="card" style="margin-bottom: 2rem;">
+
+                <div class="card-header">
+
+                    <div class="card-title">
+                        <i
+                            class="fa-solid fa-user-clock"
+                            style="color: var(--primary);"
+                        ></i>
+
+                        My Attendance
+                    </div>
+
+
+                    <?php if (!$hrTodayAttendance): ?>
+
+                        <span class="status-pill pending">
+                            Not checked in
+                        </span>
+
+                    <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
+
+                        <span class="status-pill active">
+                            Working
+                        </span>
+
+                    <?php else: ?>
+
+                        <span class="status-pill approved">
+                            Completed
+                        </span>
+
+                    <?php endif; ?>
+
                 </div>
 
-                <strong style="font-size: 1.1rem;">
-                    <?=
-                        $hrTodayAttendance
-                            ? formatTime(
-                                $hrTodayAttendance['clock_in']
-                            )
-                            : '--:--'
-                    ?>
-                </strong>
-            </div>
 
-            <div>
                 <div
                     style="
-                        color: var(--text-muted);
-                        font-size: 0.75rem;
-                        margin-bottom: 0.3rem;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        gap: 1.5rem;
+                        flex-wrap: wrap;
+                        padding: 0.5rem;
                     "
                 >
-                    CHECK-OUT TIME
+
+                    <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+
+                        <div>
+
+                            <div
+                                style="
+                                    color: var(--text-muted);
+                                    font-size: 0.75rem;
+                                    margin-bottom: 0.3rem;
+                                "
+                            >
+                                CHECK-IN TIME
+                            </div>
+
+                            <strong style="font-size: 1.1rem;">
+                                <?= 
+                                    $hrTodayAttendance
+                                        ? formatTime(
+                                            $hrTodayAttendance['clock_in']
+                                        )
+                                        : '--:--'
+                                ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div>
+
+                            <div
+                                style="
+                                    color: var(--text-muted);
+                                    font-size: 0.75rem;
+                                    margin-bottom: 0.3rem;
+                                "
+                            >
+                                CHECK-OUT TIME
+                            </div>
+
+                            <strong style="font-size: 1.1rem;">
+                                <?= 
+                                    !empty($hrTodayAttendance['clock_out'])
+                                        ? formatTime(
+                                            $hrTodayAttendance['clock_out']
+                                        )
+                                        : '--:--'
+                                ?>
+                            </strong>
+
+                        </div>
+
+
+                        <div>
+
+                            <div
+                                style="
+                                    color: var(--text-muted);
+                                    font-size: 0.75rem;
+                                    margin-bottom: 0.3rem;
+                                "
+                            >
+                                TOTAL HOURS
+                            </div>
+
+                            <strong style="font-size: 1.1rem;">
+                                <?= 
+                                    !empty($hrTodayAttendance['clock_out'])
+                                        ? htmlspecialchars(
+                                            $hrTodayAttendance['total_hours']
+                                        ) . ' hrs'
+                                        : '--'
+                                ?>
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+
+                    <div>
+
+                        <?php if (!$hrTodayAttendance): ?>
+
+                            <form
+                                action="actions/attendance_action.php"
+                                method="POST"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="clock_in"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary"
+                                >
+                                    <i class="fa-solid fa-right-to-bracket"></i>
+                                    Check In
+                                </button>
+
+                            </form>
+
+
+                        <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
+
+                            <form
+                                action="actions/attendance_action.php"
+                                method="POST"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="clock_out"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-danger"
+                                >
+                                    <i class="fa-solid fa-right-from-bracket"></i>
+                                    Check Out
+                                </button>
+
+                            </form>
+
+
+                            <p
+                                style="
+                                    margin-top: 0.5rem;
+                                    color: var(--text-muted);
+                                    font-size: 0.7rem;
+                                "
+                            >
+                                Checkout is allowed after completing six hours.
+                            </p>
+
+
+                        <?php else: ?>
+
+                            <span style="color: var(--text-muted);">
+                                Attendance completed for today
+                            </span>
+
+                        <?php endif; ?>
+
+                    </div>
+
                 </div>
 
-                <strong style="font-size: 1.1rem;">
-                    <?=
-                        !empty($hrTodayAttendance['clock_out'])
-                            ? formatTime(
-                                $hrTodayAttendance['clock_out']
-                            )
-                            : '--:--'
-                    ?>
-                </strong>
             </div>
 
-            <div>
-                <div
-                    style="
-                        color: var(--text-muted);
-                        font-size: 0.75rem;
-                        margin-bottom: 0.3rem;
-                    "
-                >
-                    TOTAL HOURS
-                </div>
 
-                <strong style="font-size: 1.1rem;">
-                    <?=
-                        !empty($hrTodayAttendance['clock_out'])
-                            ? htmlspecialchars(
-                                $hrTodayAttendance['total_hours']
-                            ) . ' hrs'
-                            : '--'
-                    ?>
-                </strong>
-            </div>
-        </div>
-
-        <div>
-            <?php if (!$hrTodayAttendance): ?>
-                <form
-                    action="actions/attendance_action.php"
-                    method="POST"
-                >
-                    <input
-                        type="hidden"
-                        name="action"
-                        value="clock_in"
-                    >
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
-                        <i class="fa-solid fa-right-to-bracket"></i>
-                        Check In
-                    </button>
-                </form>
-
-            <?php elseif (empty($hrTodayAttendance['clock_out'])): ?>
-                <form
-                    action="actions/attendance_action.php"
-                    method="POST"
-                >
-                    <input
-                        type="hidden"
-                        name="action"
-                        value="clock_out"
-                    >
-
-                    <button
-                        type="submit"
-                        class="btn btn-danger"
-                    >
-                        <i class="fa-solid fa-right-from-bracket"></i>
-                        Check Out
-                    </button>
-                </form>
-
-                <p
-                    style="
-                        margin-top: 0.5rem;
-                        color: var(--text-muted);
-                        font-size: 0.7rem;
-                    "
-                >
-                    Checkout is allowed after completing six hours.
-                </p>
-
-            <?php else: ?>
-                <span style="color: var(--text-muted);">
-                    Attendance completed for today
-                </span>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
             <!-- Quick Action Bar -->
-            <div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="openModal('addEmployeeModal')">
-                    <i class="fa-solid fa-user-plus"></i> Add New Employee
+
+            <div
+                style="
+                    display: flex;
+                    gap: 1rem;
+                    margin-bottom: 2rem;
+                    flex-wrap: wrap;
+                "
+            >
+
+                <button
+                    class="btn btn-primary"
+                    onclick="openModal('addEmployeeModal')"
+                >
+                    <i class="fa-solid fa-user-plus"></i>
+                    Add New Employee
                 </button>
-                <button class="btn btn-secondary" onclick="openModal('addAnnouncementModal')">
-                    <i class="fa-solid fa-bullhorn"></i> Post Announcement
+
+                <button
+                    class="btn btn-secondary"
+                    onclick="openModal('addAnnouncementModal')"
+                >
+                    <i class="fa-solid fa-bullhorn"></i>
+                    Post Announcement
                 </button>
+
             </div>
+
 
             <!-- Leave Requests Review Section -->
-            <div class="card" id="leavesSection" style="margin-bottom: 2rem;">
+
+            <div
+                class="card"
+                id="leavesSection"
+                style="margin-bottom: 2rem;"
+            >
+
                 <div class="card-header">
+
                     <div class="card-title">
-                        <i class="fa-solid fa-calendar-check" style="color: var(--primary);"></i>
+                        <i
+                            class="fa-solid fa-calendar-check"
+                            style="color: var(--primary);"
+                        ></i>
+
                         Leave Applications & Approvals
                     </div>
-                    <span class="status-pill pending"><?= $pendingLeaves ?> Pending Review</span>
+
+                    <span class="status-pill pending">
+                        <?= $pendingLeaves ?> Pending Review
+                    </span>
+
                 </div>
 
-                <<div class="table-responsive">
+<<<<<<< HEAD
+
+                <div class="table-responsive">
+
+=======
+                <div class="table-responsive">
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
                     <table class="custom-table">
+
                         <thead>
+
                             <tr>
                                 <th>Employee</th>
                                 <th>Department</th>
@@ -354,28 +516,52 @@ include __DIR__ . '/includes/header.php';
                                 <th>Payment</th>
                                 <th>Actions</th>
                             </tr>
+
                         </thead>
 
+
                         <tbody>
+
                             <?php if (empty($leaves)): ?>
+
                                 <tr>
-                                    <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+
+                                    <td
+                                        colspan="8"
+                                        style="
+                                            text-align: center;
+                                            color: var(--text-muted);
+                                            padding: 2rem;
+                                        "
+                                    >
                                         No leave applications submitted yet.
                                     </td>
+
                                 </tr>
+
                             <?php else: ?>
 
                                 <?php foreach ($leaves as $l): ?>
+
                                     <tr>
+
                                         <td>
+
                                             <strong>
                                                 <?= htmlspecialchars($l['employee_name']) ?>
                                             </strong>
 
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                            <div
+                                                style="
+                                                    font-size: 0.75rem;
+                                                    color: var(--text-muted);
+                                                "
+                                            >
                                                 <?= htmlspecialchars($l['employee_email']) ?>
                                             </div>
+
                                         </td>
+
 
                                         <td>
                                             <?= htmlspecialchars(
@@ -383,24 +569,39 @@ include __DIR__ . '/includes/header.php';
                                             ) ?>
                                         </td>
 
+
                                         <td>
+
                                             <strong>
                                                 <?= htmlspecialchars($l['leave_type']) ?>
                                             </strong>
+
                                         </td>
 
+
                                         <td>
+
                                             <?= formatNiceDate($l['start_date']) ?>
                                             to
                                             <?= formatNiceDate($l['end_date']) ?>
 
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                            <div
+                                                style="
+                                                    font-size: 0.75rem;
+                                                    color: var(--text-muted);
+                                                "
+                                            >
                                                 <?= (int) $l['total_days'] ?> day(s)
                                             </div>
+
                                         </td>
 
+
                                         <td style="max-width: 250px;">
-                                            <span title="<?= htmlspecialchars($l['reason']) ?>">
+
+                                            <span
+                                                title="<?= htmlspecialchars($l['reason']) ?>"
+                                            >
                                                 <?= htmlspecialchars(
                                                     mb_strimwidth(
                                                         $l['reason'],
@@ -410,46 +611,116 @@ include __DIR__ . '/includes/header.php';
                                                     )
                                                 ) ?>
                                             </span>
+
                                         </td>
 
+
                                         <td>
-                                            <span class="status-pill <?= htmlspecialchars(
-                                                $l['status']
-                                            ) ?>">
+
+                                            <span
+                                                class="status-pill <?= htmlspecialchars($l['status']) ?>"
+                                            >
                                                 <?= ucfirst($l['status']) ?>
                                             </span>
+
                                         </td>
 
+
                                         <td>
-                                            <?php 
-                                                $isPaidLeave = ($l['leave_category'] ?? ($l['is_paid'] ?? 1) == 1) === 'paid' || ($l['is_paid'] ?? 1) == 1;
+
+                                            <?php
+                                            $isPaidLeave =
+                                                ($l['leave_category'] ?? ($l['is_paid'] ?? 1)) === 'paid'
+                                                || ($l['is_paid'] ?? 1) == 1;
                                             ?>
+
                                             <?php if ($isPaidLeave): ?>
-                                                <span class="status-pill present" style="font-size: 0.75rem; padding: 3px 8px;">
-                                                    <i class="fa-solid fa-circle-check"></i> Paid Leave
+
+                                                <span
+                                                    class="status-pill present"
+                                                    style="
+                                                        font-size: 0.75rem;
+                                                        padding: 3px 8px;
+                                                    "
+                                                >
+                                                    <i class="fa-solid fa-circle-check"></i>
+                                                    Paid Leave
                                                 </span>
+
                                             <?php else: ?>
-                                                <span class="status-pill pending" style="font-size: 0.75rem; padding: 3px 8px; background: rgba(245, 158, 11, 0.15); color: #b45309;">
-                                                    <i class="fa-solid fa-coins"></i> Unpaid (LWP)
+
+                                                <span
+                                                    class="status-pill pending"
+                                                    style="
+                                                        font-size: 0.75rem;
+                                                        padding: 3px 8px;
+                                                        background: rgba(245, 158, 11, 0.15);
+                                                        color: #b45309;
+                                                    "
+                                                >
+                                                    <i class="fa-solid fa-coins"></i>
+                                                    Unpaid (LWP)
                                                 </span>
+
                                             <?php endif; ?>
+
                                         </td>
 
+
                                         <td>
+
                                             <?php if ($l['status'] === 'pending'): ?>
-                                                <div style="display: flex; gap: 0.4rem; align-items: flex-start;">
+
+                                                <div
+                                                    style="
+                                                        display: flex;
+                                                        gap: 0.4rem;
+                                                        align-items: flex-start;
+                                                    "
+                                                >
+
                                                     <!-- Approve form -->
-                                                    <form action="actions/leave_action.php" method="POST">
-                                                        <input type="hidden" name="action" value="review_leave">
 
-                                                        <input type="hidden" name="leave_id" value="<?= (int) $l['id'] ?>">
+                                                    <form
+                                                        action="actions/leave_action.php"
+                                                        method="POST"
+                                                    >
 
-                                                        <input type="hidden" name="status" value="approved">
+                                                        <input
+                                                            type="hidden"
+                                                            name="action"
+                                                            value="review_leave"
+                                                        >
 
-                                                        <input type="hidden" name="review_comment" value="Approved by HR.">
+                                                        <input
+                                                            type="hidden"
+                                                            name="leave_id"
+                                                            value="<?= (int) $l['id'] ?>"
+                                                        >
 
-                                                        <select name="payment_type" class="form-control" required
-                                                            style="min-width: 145px; padding: 0.45rem; margin-bottom: 0.4rem;">
+                                                        <input
+                                                            type="hidden"
+                                                            name="status"
+                                                            value="approved"
+                                                        >
+
+                                                        <input
+                                                            type="hidden"
+                                                            name="review_comment"
+                                                            value="Approved by HR."
+                                                        >
+
+                                                        <select
+                                                            name="payment_type"
+                                                            class="form-control"
+                                                            required
+                                                            style="
+                                                                min-width: 145px;
+                                                                padding: 0.45rem;
+                                                                margin-bottom: 0.4rem;
+                                                            "
+                                                        >
+
                                                             <option value="">
                                                                 Select payment
                                                             </option>
@@ -461,84 +732,278 @@ include __DIR__ . '/includes/header.php';
                                                             <option value="unpaid">
                                                                 Unpaid Leave
                                                             </option>
+
                                                         </select>
 
-                                                        <button type="submit" class="btn btn-success btn-sm" title="Approve">
+
+                                                        <button
+                                                            type="submit"
+                                                            class="btn btn-success btn-sm"
+                                                            title="Approve"
+                                                        >
                                                             <i class="fa-solid fa-check"></i>
                                                             Approve
                                                         </button>
+
                                                     </form>
 
+<<<<<<< HEAD
+
                                                     <!-- Reject form -->
-                                                    <form action="actions/leave_action.php" method="POST">
-                                                        <input type="hidden" name="action" value="review_leave">
 
-                                                        <input type="hidden" name="leave_id" value="<?= (int) $l['id'] ?>">
+                                                    <form
+                                                        action="actions/leave_action.php"
+                                                        method="POST"
+                                                    >
 
-                                                        <input type="hidden" name="status" value="rejected">
+                                                        <input
+                                                            type="hidden"
+                                                            name="action"
+                                                            value="review_leave"
+                                                        >
 
-                                                        <input type="hidden" name="review_comment" value="Declined by HR.">
+                                                        <input
+                                                            type="hidden"
+                                                            name="leave_id"
+                                                            value="<?= (int) $l['id'] ?>"
+                                                        >
 
-                                                        <button type="submit" class="btn btn-danger btn-sm" title="Reject">
+                                                        <input
+                                                            type="hidden"
+                                                            name="status"
+                                                            value="rejected"
+                                                        >
+
+                                                        <input
+                                                            type="hidden"
+                                                            name="review_comment"
+                                                            value="Declined by HR."
+                                                        >
+
+                                                        <button
+                                                            type="submit"
+                                                            class="btn btn-danger btn-sm"
+                                                            title="Reject"
+                                                        >
                                                             <i class="fa-solid fa-xmark"></i>
                                                             Reject
                                                         </button>
+
                                                     </form>
+
                                                 </div>
+
                                             <?php else: ?>
-                                                <span style="font-size: 0.8rem; color: var(--text-muted);">
+
+                                                <span
+                                                    style="
+                                                        font-size: 0.8rem;
+                                                        color: var(--text-muted);
+                                                    "
+                                                >
                                                     Reviewed by
                                                     <?= htmlspecialchars(
                                                         $l['reviewer_name'] ?? 'HR'
                                                     ) ?>
                                                 </span>
+
                                             <?php endif; ?>
+
                                         </td>
+
                                     </tr>
+
                                 <?php endforeach; ?>
 
                             <?php endif; ?>
+
                         </tbody>
+
                     </table>
+
+                </div>
+
             </div>
+
+=======
+                                                
+                                                   <!-- Reject button -->
+<details class="reject-details">
+    <summary class="btn btn-danger btn-sm">
+        <i class="fa-solid fa-xmark"></i>
+        Reject
+    </summary>
+
+    <form
+        action="actions/leave_action.php"
+        method="POST"
+        onsubmit="return prepareRejection(this)"
+        
+        style="
+            margin-top: 0.7rem;
+            min-width: 230px;
+            padding: 0.75rem;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff7f7;
+        "
+    >
+        <input
+            type="hidden"
+            name="action"
+            value="review_leave"
+        >
+
+        <input
+            type="hidden"
+            name="leave_id"
+            value="<?= (int)$l['id'] ?>"
+        >
+
+        <input
+            type="hidden"
+            name="status"
+            value="rejected"
+        >
+
+        <label
+            for="rejectComment<?= (int)$l['id'] ?>"
+            style="
+                display: block;
+                margin-bottom: 0.4rem;
+                font-size: 0.8rem;
+                font-weight: 600;
+            "
+        >
+            Reason for rejection
+        </label>
+
+        <textarea
+            id="rejectComment<?= (int)$l['id'] ?>"
+            name="review_comment"
+            class="form-control"
+            rows="3"
+            minlength="5"
+            placeholder="Explain why this leave is being rejected"
+            required
+            style="margin-bottom: 0.6rem;"
+        ></textarea>
+
+        <button
+            type="submit"
+            class="btn btn-danger btn-sm"
+        >
+            Confirm rejection
+        </button>
+    </form>
+</details>
+                                                </div>
+                                            </div>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.8rem; color: var(--text-muted);">
+                                                Reviewed by <?= htmlspecialchars($l['reviewer_name'] ?? 'HR') ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
+
             <div class="grid-3">
+
+
                 <!-- Employee Directory -->
-                <div class="card" id="employeesSection">
+
+                <div
+                    class="card"
+                    id="employeesSection"
+                >
+
                     <div class="card-header">
+
                         <div class="card-title">
-                            <i class="fa-solid fa-users-gear" style="color: var(--primary);"></i>
+
+                            <i
+                                class="fa-solid fa-users-gear"
+                                style="color: var(--primary);"
+                            ></i>
+
                             Employee Directory
+
                         </div>
-                        <button class="btn btn-secondary btn-sm" onclick="openModal('addEmployeeModal')">
-                            <i class="fa-solid fa-plus"></i> New
+
+
+                        <button
+                            class="btn btn-secondary btn-sm"
+                            onclick="openModal('addEmployeeModal')"
+                        >
+                            <i class="fa-solid fa-plus"></i>
+                            New
                         </button>
+
                     </div>
 
+
                     <div class="table-responsive">
+
                         <table class="custom-table">
+
+                            <!-- MODIFIED EMPLOYEE TABLE HEADER -->
+
                             <thead>
+
                                 <tr>
+
                                     <th>Employee</th>
-                                    <th>Role & Dept</th>
-                                    <th>Designation</th>
-                                    <th>Status</th>
+
+                                    <th>Department & Role</th>
+
+                                    <th>Contact Info</th>
+
+                                    <th>Net Salary</th>
+
                                     <th>Actions</th>
+
                                 </tr>
+
                             </thead>
+
+
                             <tbody>
-                                <?php foreach ($employees as $emp): ?>
+
+                                <?php if (empty($employees)): ?>
+
                                     <tr>
+<<<<<<< HEAD
+
+                                        <td
+                                            colspan="5"
+                                            style="
+                                                text-align: center;
+                                                color: var(--text-muted);
+                                                padding: 2rem;
+                                            "
+                                        >
+                                            No employees found.
+=======
                                         <td>
-                                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="Click to view full employee profile">
                                                 <div class="user-mini-avatar"
-                                                    style="width: 34px; height: 34px; font-size: 0.8rem;">
+                                                    style="width: 36px; height: 36px; font-size: 0.85rem; background: var(--primary-gradient); color: #ffffff; cursor: pointer;">
                                                     <?= strtoupper(substr($emp['name'], 0, 1)) ?>
                                                 </div>
                                                 <div>
-                                                    <div style="font-weight: 600;"><?= htmlspecialchars($emp['name']) ?>
+                                                    <div style="font-weight: 600; color: var(--primary); text-decoration: underline; text-underline-offset: 2px;">
+                                                        <?= htmlspecialchars($emp['name']) ?>
                                                     </div>
                                                     <div style="font-size: 0.75rem; color: var(--text-muted);">
-                                                        <?= htmlspecialchars($emp['email']) ?></div>
+                                                        <?= htmlspecialchars($emp['email']) ?>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -558,221 +1023,1354 @@ include __DIR__ . '/includes/header.php';
                                             </span>
                                         </td>
                                         <td>
-                                            <?php if ($emp['id'] !== $currentUser['id']): ?>
-                                                <form action="actions/employee_action.php" method="POST"
-                                                    onsubmit="return confirm('Are you sure you want to remove this employee account?');"
-                                                    style="display: inline;">
-                                                    <input type="hidden" name="action" value="delete_employee">
-                                                    <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
-                                                    <button type="submit" class="btn btn-secondary btn-sm"
-                                                        style="color: #ef4444; padding: 4px 8px;" title="Delete">
-                                                        <i class="fa-regular fa-trash-can"></i>
-                                                    </button>
-                                                </form>
-                                            <?php else: ?>
-                                                <span style="font-size: 0.75rem; color: var(--text-light);">You</span>
-                                            <?php endif; ?>
+                                            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                <button type="button" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="View Full Details">
+                                                    <i class="fa-regular fa-eye"></i> Details
+                                                </button>
+                                                <?php if ($emp['id'] !== $currentUser['id']): ?>
+                                                    <form action="actions/employee_action.php" method="POST"
+                                                        onsubmit="return confirm('Are you sure you want to remove this employee account?');"
+                                                        style="display: inline;">
+                                                        <input type="hidden" name="action" value="delete_employee">
+                                                        <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
+                                                        <button type="submit" class="btn btn-secondary btn-sm"
+                                                            style="color: #ef4444; padding: 4px 8px;" title="Delete">
+                                                            <i class="fa-regular fa-trash-can"></i>
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
                                         </td>
+
                                     </tr>
-                                <?php endforeach; ?>
+
+                                <?php else: ?>
+
+                                    <?php foreach ($employees as $emp): ?>
+
+                                        <tr>
+
+                                            <!-- Employee -->
+
+                                            <td>
+
+                                                <div
+                                                    style="
+                                                        display: flex;
+                                                        align-items: center;
+                                                        gap: 0.75rem;
+                                                    "
+                                                >
+
+                                                    <div
+                                                        class="user-mini-avatar"
+                                                        style="
+                                                            width: 34px;
+                                                            height: 34px;
+                                                            font-size: 0.8rem;
+                                                        "
+                                                    >
+                                                        <?= strtoupper(
+                                                            substr(
+                                                                $emp['name'],
+                                                                0,
+                                                                1
+                                                            )
+                                                        ) ?>
+                                                    </div>
+
+
+                                                    <div>
+
+                                                        <div
+                                                            style="font-weight: 600;"
+                                                        >
+                                                            <?= htmlspecialchars($emp['name']) ?>
+                                                        </div>
+
+                                                        <div
+                                                            style="
+                                                                font-size: 0.75rem;
+                                                                color: var(--text-muted);
+                                                            "
+                                                        >
+                                                            <?= htmlspecialchars($emp['email']) ?>
+                                                        </div>
+
+                                                    </div>
+
+                                                </div>
+
+                                            </td>
+
+
+                                            <!-- Department & Role -->
+
+                                            <td>
+
+                                                <div>
+                                                    <?= htmlspecialchars(
+                                                        $emp['designation'] ?? 'Staff'
+                                                    ) ?>
+                                                </div>
+
+                                                <small
+                                                    style="color: var(--primary);"
+                                                >
+                                                    <?= htmlspecialchars(
+                                                        $emp['department_name'] ?? 'General'
+                                                    ) ?>
+                                                </small>
+
+                                                <div
+                                                    style="
+                                                        margin-top: 4px;
+                                                    "
+                                                >
+
+                                                    <span
+                                                        class="role-badge <?= htmlspecialchars($emp['role']) ?>"
+                                                        style="
+                                                            font-size: 0.7rem;
+                                                            padding: 2px 8px;
+                                                        "
+                                                    >
+                                                        <?= strtoupper(
+                                                            htmlspecialchars($emp['role'])
+                                                        ) ?>
+                                                    </span>
+
+                                                </div>
+
+                                            </td>
+
+
+                                            <!-- Contact Info -->
+
+                                            <td>
+
+                                                <div>
+                                                    <?= htmlspecialchars(
+                                                        $emp['phone'] ?? 'N/A'
+                                                    ) ?>
+                                                </div>
+
+                                                <small
+                                                    class="text-muted"
+                                                    title="<?= htmlspecialchars(
+                                                        $emp['address'] ?? ''
+                                                    ) ?>"
+                                                >
+                                                    <?= htmlspecialchars(
+                                                        mb_strimwidth(
+                                                            $emp['address'] ?? 'No address',
+                                                            0,
+                                                            20,
+                                                            '...'
+                                                        )
+                                                    ) ?>
+                                                </small>
+
+                                            </td>
+
+
+                                            <!-- Net Salary -->
+
+                                            <td>
+
+                                                <strong>
+                                                    ₹<?= number_format(
+                                                        (float) (
+                                                            $emp['net_salary']
+                                                            ?? $emp['basic_salary']
+                                                            ?? 0
+                                                        ),
+                                                        2
+                                                    ); ?>
+                                                </strong>
+
+                                            </td>
+
+
+                                            <!-- Actions -->
+
+                                            <td>
+
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-secondary btn-sm"
+                                                    onclick="openEditEmployeeModal(<?= htmlspecialchars(
+                                                      json_encode($emp),
+                                                      ENT_QUOTES,
+                                                      'UTF-8'
+                                                    ) ?>)"
+                                                >
+
+                                                    <i
+                                                        class="fa-solid fa-pen-to-square"
+                                                    ></i>
+
+                                                    Edit
+
+                                                </button>
+
+                                            </td>
+
+                                        </tr>
+
+                                    <?php endforeach; ?>
+
+                                <?php endif; ?>
+
                             </tbody>
+
                         </table>
+
                     </div>
+
                 </div>
+
 
                 <!-- Today's Attendance Feed & Announcements -->
-                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+<<<<<<< HEAD
+
+                <div
+                    style="
+                        display: flex;
+                        flex-direction: column;
+                        gap: 1.5rem;
+                    "
+                >
+
+
                     <!-- Attendance Card -->
-                    <div class="card" id="attendanceSection">
+
+                    <div
+                        class="card"
+                        id="attendanceSection"
+                    >
+
                         <div class="card-header">
+
                             <div class="card-title">
-                                <i class="fa-solid fa-clock" style="color: var(--primary);"></i>
+
+                                <i
+                                    class="fa-solid fa-clock"
+                                    style="color: var(--primary);"
+                                ></i>
+
                                 Today's Attendance Log
+
                             </div>
-                            <span class="status-pill present"><?= count($todayAttendance) ?> Logged</span>
+
+                            <span class="status-pill present">
+                                <?= count($todayAttendance) ?> Logged
+                            </span>
+
                         </div>
+
 
                         <?php if (empty($todayAttendance)): ?>
-                            <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1rem 0;">
+
+                            <p
+                                style="
+                                    color: var(--text-muted);
+                                    font-size: 0.875rem;
+                                    text-align: center;
+                                    padding: 1rem 0;
+                                "
+                            >
                                 No attendance records logged today yet.
                             </p>
+
                         <?php else: ?>
+
                             <div
-                                style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
+                                style="
+                                    display: flex;
+                                    flex-direction: column;
+                                    gap: 0.75rem;
+                                    max-height: 280px;
+                                    overflow-y: auto;
+                                "
+                            >
+
                                 <?php foreach ($todayAttendance as $att): ?>
+
                                     <div
-                                        style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                        style="
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: space-between;
+                                            padding: 0.6rem 0.8rem;
+                                            background: var(--bg-main);
+                                            border-radius: var(--radius-sm);
+                                            border: 1px solid var(--border-color);
+                                        "
+                                    >
+
                                         <div>
+
                                             <strong
-                                                style="font-size: 0.875rem;"><?= htmlspecialchars($att['employee_name']) ?></strong>
-                                            <div style="font-size: 0.75rem; color: var(--text-muted);">In:
+                                                style="font-size: 0.875rem;"
+                                            >
+                                                <?= htmlspecialchars(
+                                                    $att['employee_name']
+                                                ) ?>
+                                            </strong>
+
+                                            <div
+                                                style="
+                                                    font-size: 0.75rem;
+                                                    color: var(--text-muted);
+                                                "
+                                            >
+                                                In:
                                                 <?= formatTime($att['clock_in']) ?>
-                                                <?= $att['clock_out'] ? '• Out: ' . formatTime($att['clock_out']) : '' ?></div>
+
+                                                <?= $att['clock_out']
+                                                    ? '• Out: ' . formatTime($att['clock_out'])
+                                                    : '' ?>
+                                            </div>
+
                                         </div>
-                                        <span class="status-pill <?= $att['status'] ?>"><?= ucfirst($att['status']) ?></span>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        <?php endif; ?>
-                    </div>
 
-                    <!-- Announcements Card -->
-                    <div class="card" id="announcementsSection">
-                        <div class="card-header">
-                            <div class="card-title">
-                                <i class="fa-solid fa-bullhorn" style="color: var(--primary);"></i>
-                                Company Announcements
-                            </div>
-                            <button class="btn btn-secondary btn-sm" onclick="openModal('addAnnouncementModal')">
-                                <i class="fa-solid fa-plus"></i> Post
-                            </button>
-                        </div>
 
-                        <div
-                            style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 280px; overflow-y: auto;">
-                            <?php foreach ($announcements as $ann): ?>
-                                <div
-                                    style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff;">
-                                    <div
-                                        style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
-                                        <strong style="font-size: 0.9rem;"><?= htmlspecialchars($ann['title']) ?></strong>
                                         <span
-                                            class="status-pill <?= $ann['category'] === 'urgent' ? 'rejected' : ($ann['category'] === 'event' ? 'on_leave' : 'active') ?>"
-                                            style="font-size: 0.65rem;">
-                                            <?= ucfirst($ann['category']) ?>
+                                            class="status-pill <?= $att['status'] ?>"
+                                        >
+                                            <?= ucfirst($att['status']) ?>
                                         </span>
-                                    </div>
-                                    <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.4rem;">
-                                        <?= nl2br(htmlspecialchars($ann['content'])) ?>
-                                    </p>
-                                    <div
-                                        style="display: flex; justify-content: space-between; font-size: 0.725rem; color: var(--text-light);">
-                                        <span>By <?= htmlspecialchars($ann['author_name']) ?></span>
-                                        <span><?= formatNiceDate($ann['created_at']) ?></span>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </main>
 
-        <!-- Modal: Add Employee -->
-        <div class="modal-overlay" id="addEmployeeModal">
-            <div class="modal-card">
-                <div class="modal-header">
-                    <h3 style="font-size: 1.2rem; font-weight: 700;">Add New Employee</h3>
-                    <button class="modal-close-btn" onclick="closeModal('addEmployeeModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form action="actions/employee_action.php" method="POST">
-                        <input type="hidden" name="action" value="add_employee">
-
-                        <div class="form-group">
-                            <label class="form-label">Full Name *</label>
-                            <input type="text" name="name" class="form-control" placeholder="e.g. Rachel Adams"
-                                required>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Email Address *</label>
-                            <input type="email" name="email" class="form-control" placeholder="rachel@dayflow.com"
-                                required>
-                        </div>
-
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Department</label>
-                                <select name="department_id" class="form-control">
-                                    <option value="">-- Select --</option>
-                                    <?php foreach ($departments as $dept): ?>
-                                        <option value="<?= $dept['id'] ?>"><?= htmlspecialchars($dept['name']) ?></option>
-                                    <?php endforeach; ?>
-                                </select>
+=======
+                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <!-- Attendance Hub (Daily & Weekly Views) -->
+                    <div class="card" id="attendanceSection">
+                        <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem;">
+                            <div class="card-title">
+                                <i class="fa-solid fa-clock" style="color: var(--primary);"></i>
+                                Master Attendance Hub
                             </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Role</label>
-                                <select name="role" class="form-control">
-                                    <option value="employee" selected>Employee</option>
-                                    <option value="hr">HR Admin</option>
-                                </select>
+                            <div style="display: flex; gap: 4px; background: var(--bg-main); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <button type="button" id="hrAttDailyBtn" onclick="switchHRAttTab('daily')" class="btn btn-sm btn-primary" style="font-size: 0.7rem; padding: 2px 8px;">Daily View</button>
+                                <button type="button" id="hrAttWeeklyBtn" onclick="switchHRAttTab('weekly')" class="btn btn-sm btn-secondary" style="font-size: 0.7rem; padding: 2px 8px;">Weekly View</button>
                             </div>
                         </div>
 
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Designation</label>
-                                <input type="text" name="designation" class="form-control"
-                                    placeholder="e.g. Frontend Engineer">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Phone</label>
-                                <input type="text" name="phone" class="form-control" placeholder="+1 (555) 000-0000">
-                            </div>
-                        </div>
-
-                        <div class="grid-2">
-                            <div class="form-group">
-                                <label class="form-label">Monthly Salary ($)</label>
-                                <input type="number" step="100" name="salary" class="form-control" value="50000">
-                            </div>
-
-                            <div class="form-group">
-                                <label class="form-label">Password</label>
-                                <input type="text" name="password" class="form-control" value="password123">
-                            </div>
-                        </div>
-
-                        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">
-                            <i class="fa-solid fa-user-plus"></i> Save Employee Record
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal: Post Announcement -->
-        <div class="modal-overlay" id="addAnnouncementModal">
-            <div class="modal-card">
-                <div class="modal-header">
-                    <h3 style="font-size: 1.2rem; font-weight: 700;">Broadcast Company Announcement</h3>
-                    <button class="modal-close-btn" onclick="closeModal('addAnnouncementModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <form action="actions/announcement_action.php" method="POST">
-                        <input type="hidden" name="action" value="create_announcement">
-
-                        <div class="form-group">
-                            <label class="form-label">Announcement Title *</label>
-                            <input type="text" name="title" class="form-control"
-                                placeholder="e.g. Holiday Schedule Announcement" required>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Category</label>
-                            <select name="category" class="form-control">
-                                <option value="general">General Update</option>
-                                <option value="urgent">Urgent Notice</option>
-                                <option value="event">Company Event / Townhall</option>
-                                <option value="holiday">Holiday Notice</option>
+                        <!-- Employee Quick Filter -->
+                        <div style="margin-bottom: 0.85rem;">
+                            <select id="hrAttEmpFilter" onchange="filterHRAttendance()" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.65rem;">
+                                <option value="all">🔍 Filter by Employee (All Team Members)</option>
+                                <?php foreach ($employees as $e): ?>
+                                    <option value="<?= $e['id'] ?>"><?= htmlspecialchars($e['name']) ?> (<?= htmlspecialchars($e['department_name'] ?? 'General') ?>)</option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
 
-                        <div class="form-group">
-                            <label class="form-label">Message Content *</label>
-                            <textarea name="content" class="form-control" rows="4"
-                                placeholder="Write announcement details for all team members..." required></textarea>
+                        <!-- Daily Attendance View -->
+                        <div id="hrAttDailyView" style="display: flex; flex-direction: column; gap: 0.65rem; max-height: 280px; overflow-y: auto;">
+                            <?php if (empty($todayAttendance)): ?>
+                                <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1.25rem 0;">
+                                    No attendance records logged today yet.
+                                </p>
+                            <?php else: ?>
+                                <?php foreach ($todayAttendance as $att): ?>
+                                    <div class="hr-att-item" data-user-id="<?= $att['user_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                        <div>
+                                            <strong style="font-size: 0.875rem; color: var(--text-main);"><?= htmlspecialchars($att['employee_name']) ?></strong>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                In: <?= formatTime($att['clock_in']) ?>
+                                                <?= $att['clock_out'] ? ' • Out: ' . formatTime($att['clock_out']) : '' ?>
+                                                <?= $att['total_hours'] > 0 ? ' (' . $att['total_hours'] . ' hrs)' : '' ?>
+                                            </div>
+                                        </div>
+                                        <span class="status-pill <?= htmlspecialchars($att['status']) ?>"><?= ucfirst(str_replace('_', ' ', $att['status'])) ?></span>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
+                                    </div>
+
+                                <?php endforeach; ?>
+<<<<<<< HEAD
+
+                            </div>
+
+                        <?php endif; ?>
+
+                    </div>
+
+=======
+                            <?php endif; ?>
                         </div>
 
-                        <button type="submit" class="btn btn-primary" style="width: 100%;">
-                            <i class="fa-solid fa-paper-plane"></i> Publish to Portal
+                        <!-- Weekly Attendance View -->
+                        <div id="hrAttWeeklyView" style="display: none; flex-direction: column; gap: 0.65rem; max-height: 280px; overflow-y: auto;">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 2px;">
+                                Current Week: <?= formatNiceDate($mondayThisWeek) ?> - <?= formatNiceDate($sundayThisWeek) ?>
+                            </div>
+                            <?php if (empty($weeklyAttendance)): ?>
+                                <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1.25rem 0;">
+                                    No attendance records logged for this week.
+                                </p>
+                            <?php else: ?>
+                                <?php foreach ($weeklyAttendance as $wAtt): ?>
+                                    <div class="hr-att-item" data-user-id="<?= $wAtt['user_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: #ffffff; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                        <div>
+                                            <strong style="font-size: 0.85rem; color: var(--text-main);"><?= htmlspecialchars($wAtt['employee_name']) ?></strong>
+                                            <div style="font-size: 0.725rem; color: var(--text-muted);">
+                                                <?= date('D, M d', strtotime($wAtt['date'])) ?> • In: <?= formatTime($wAtt['clock_in']) ?>
+                                                <?= $wAtt['clock_out'] ? ' • Out: ' . formatTime($wAtt['clock_out']) : '' ?>
+                                            </div>
+                                        </div>
+                                        <span class="status-pill <?= htmlspecialchars($wAtt['status']) ?>"><?= ucfirst(str_replace('_', ' ', $wAtt['status'])) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <script>
+                    function switchHRAttTab(view) {
+                        const dView = document.getElementById('hrAttDailyView');
+                        const wView = document.getElementById('hrAttWeeklyView');
+                        const dBtn = document.getElementById('hrAttDailyBtn');
+                        const wBtn = document.getElementById('hrAttWeeklyBtn');
+
+                        if (view === 'daily') {
+                            dView.style.display = 'flex';
+                            wView.style.display = 'none';
+                            dBtn.className = 'btn btn-sm btn-primary';
+                            wBtn.className = 'btn btn-sm btn-secondary';
+                        } else {
+                            dView.style.display = 'none';
+                            wView.style.display = 'flex';
+                            dBtn.className = 'btn btn-sm btn-secondary';
+                            wBtn.className = 'btn btn-sm btn-primary';
+                        }
+                    }
+
+                    function filterHRAttendance() {
+                        const selectedUserId = document.getElementById('hrAttEmpFilter').value;
+                        const items = document.querySelectorAll('.hr-att-item');
+                        items.forEach(item => {
+                            if (selectedUserId === 'all' || item.getAttribute('data-user-id') === selectedUserId) {
+                                item.style.display = 'flex';
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+                    }
+                    </script>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
+
+                    <!-- Announcements Card -->
+
+                    <div
+                        class="card"
+                        id="announcementsSection"
+                    >
+
+                        <div class="card-header">
+
+                            <div class="card-title">
+
+                                <i
+                                    class="fa-solid fa-bullhorn"
+                                    style="color: var(--primary);"
+                                ></i>
+
+                                Company Announcements
+
+                            </div>
+
+
+                            <button
+                                class="btn btn-secondary btn-sm"
+                                onclick="openModal('addAnnouncementModal')"
+                            >
+                                <i class="fa-solid fa-plus"></i>
+                                Post
+                            </button>
+
+                        </div>
+
+
+                        <div
+                            style="
+                                display: flex;
+                                flex-direction: column;
+                                gap: 0.85rem;
+                                max-height: 280px;
+                                overflow-y: auto;
+                            "
+                        >
+
+                            <?php foreach ($announcements as $ann): ?>
+
+                                <div
+                                    style="
+                                        padding: 0.85rem;
+                                        border: 1px solid var(--border-color);
+                                        border-radius: var(--radius-md);
+                                        background: #ffffff;
+                                    "
+                                >
+
+                                    <div
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            align-items: flex-start;
+                                            margin-bottom: 0.35rem;
+                                        "
+                                    >
+
+                                        <strong
+                                            style="font-size: 0.9rem;"
+                                        >
+                                            <?= htmlspecialchars($ann['title']) ?>
+                                        </strong>
+
+
+                                        <span
+                                            class="status-pill <?= $ann['category'] === 'urgent'
+                                                ? 'rejected'
+                                                : ($ann['category'] === 'event'
+                                                    ? 'on_leave'
+                                                    : 'active') ?>"
+                                            style="font-size: 0.65rem;"
+                                        >
+                                            <?= ucfirst($ann['category']) ?>
+                                        </span>
+
+                                    </div>
+
+
+                                    <p
+                                        style="
+                                            font-size: 0.825rem;
+                                            color: var(--text-muted);
+                                            margin-bottom: 0.4rem;
+                                        "
+                                    >
+                                        <?= nl2br(
+                                            htmlspecialchars($ann['content'])
+                                        ) ?>
+                                    </p>
+
+
+                                    <div
+                                        style="
+                                            display: flex;
+                                            justify-content: space-between;
+                                            font-size: 0.725rem;
+                                            color: var(--text-light);
+                                        "
+                                    >
+
+                                        <span>
+                                            By
+                                            <?= htmlspecialchars(
+                                                $ann['author_name']
+                                            ) ?>
+                                        </span>
+
+                                        <span>
+                                            <?= formatNiceDate(
+                                                $ann['created_at']
+                                            ) ?>
+                                        </span>
+
+                                    </div>
+
+                                </div>
+
+                            <?php endforeach; ?>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </main>
+
+
+        <!-- Modal: Add Employee -->
+
+        <div
+            class="modal-overlay"
+            id="addEmployeeModal"
+        >
+
+            <div class="modal-card">
+
+                <div class="modal-header">
+
+                    <h3
+                        style="
+                            font-size: 1.2rem;
+                            font-weight: 700;
+                        "
+                    >
+                        Add New Employee
+                    </h3>
+
+
+                    <button
+                        class="modal-close-btn"
+                        onclick="closeModal('addEmployeeModal')"
+                    >
+                        &times;
+                    </button>
+
+                </div>
+
+
+                <div class="modal-body">
+
+                    <form
+                        action="actions/employee_action.php"
+                        method="POST"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="add_employee"
+                        >
+
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Full Name *
+                            </label>
+
+                            <input
+                                type="text"
+                                name="name"
+                                class="form-control"
+                                placeholder="e.g. Rachel Adams"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Email Address *
+                            </label>
+
+                            <input
+                                type="email"
+                                name="email"
+                                class="form-control"
+                                placeholder="rachel@dayflow.com"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="grid-2">
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Department
+                                </label>
+
+                                <select
+                                    name="department_id"
+                                    class="form-control"
+                                >
+
+                                    <option value="">
+                                        -- Select --
+                                    </option>
+
+                                    <?php foreach ($departments as $dept): ?>
+
+                                        <option
+                                            value="<?= $dept['id'] ?>"
+                                        >
+                                            <?= htmlspecialchars(
+                                                $dept['name']
+                                            ) ?>
+                                        </option>
+
+                                    <?php endforeach; ?>
+
+                                </select>
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Role
+                                </label>
+
+                                <select
+                                    name="role"
+                                    class="form-control"
+                                >
+
+                                    <option
+                                        value="employee"
+                                        selected
+                                    >
+                                        Employee
+                                    </option>
+
+                                    <option value="hr">
+                                        HR Admin
+                                    </option>
+
+                                </select>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="grid-2">
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Designation
+                                </label>
+
+                                <input
+                                    type="text"
+                                    name="designation"
+                                    class="form-control"
+                                    placeholder="e.g. Frontend Engineer"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Phone
+                                </label>
+
+                                <input
+                                    type="text"
+                                    name="phone"
+                                    class="form-control"
+                                    placeholder="+1 (555) 000-0000"
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="grid-2">
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Monthly Salary (₹)
+                                </label>
+
+                                <input
+                                    type="number"
+                                    step="100"
+                                    name="salary"
+                                    class="form-control"
+                                    value="50000"
+                                >
+
+                            </div>
+
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Password
+                                </label>
+
+                                <input
+                                    type="text"
+                                    name="password"
+                                    class="form-control"
+                                    value="password123"
+                                >
+
+                            </div>
+
+                        </div>
+
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            style="
+                                width: 100%;
+                                margin-top: 1rem;
+                            "
+                        >
+                            <i class="fa-solid fa-user-plus"></i>
+                            Save Employee Record
                         </button>
+
                     </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- Modal: Post Announcement -->
+
+        <div
+            class="modal-overlay"
+            id="addAnnouncementModal"
+        >
+
+            <div class="modal-card">
+
+                <div class="modal-header">
+
+                    <h3
+                        style="
+                            font-size: 1.2rem;
+                            font-weight: 700;
+                        "
+                    >
+                        Broadcast Company Announcement
+                    </h3>
+
+
+                    <button
+                        class="modal-close-btn"
+                        onclick="closeModal('addAnnouncementModal')"
+                    >
+                        &times;
+                    </button>
+
+                </div>
+
+
+                <div class="modal-body">
+
+                    <form
+                        action="actions/announcement_action.php"
+                        method="POST"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="create_announcement"
+                        >
+
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Announcement Title *
+                            </label>
+
+                            <input
+                                type="text"
+                                name="title"
+                                class="form-control"
+                                placeholder="e.g. Holiday Schedule Announcement"
+                                required
+                            >
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Category
+                            </label>
+
+                            <select
+                                name="category"
+                                class="form-control"
+                            >
+
+                                <option value="general">
+                                    General Update
+                                </option>
+
+                                <option value="urgent">
+                                    Urgent Notice
+                                </option>
+
+                                <option value="event">
+                                    Company Event / Townhall
+                                </option>
+
+                                <option value="holiday">
+                                    Holiday Notice
+                                </option>
+
+                            </select>
+
+                        </div>
+
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Message Content *
+                            </label>
+
+                            <textarea
+                                name="content"
+                                class="form-control"
+                                rows="4"
+                                placeholder="Write announcement details for all team members..."
+                                required
+                            ></textarea>
+
+                        </div>
+
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            style="width: 100%;"
+                        >
+                            <i class="fa-solid fa-paper-plane"></i>
+                            Publish to Portal
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+        <!-- Modal: Edit Employee Profile & Salary -->
+        <div class="modal-overlay" id="editEmployeeModal">
+
+            <div class="modal-card" style="max-width: 550px;">
+
+                <div class="modal-header">
+
+                    <h3 style="font-size: 1.15rem; font-weight: 700;">
+                        Edit Employee & Salary Structure
+                    </h3>
+
+                    <button
+                        class="modal-close-btn"
+                        onclick="closeModal('editEmployeeModal')"
+                    >
+                        &times;
+                    </button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <form
+                        action="actions/employee_action.php"
+                        method="POST"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="update_employee_by_admin"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="user_id"
+                            id="edit_user_id"
+                        >
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Employee Name (Read-only)
+                            </label>
+
+                            <input
+                                type="text"
+                                id="edit_name"
+                                class="form-control"
+                                disabled
+                            >
+
+                        </div>
+
+                        <div class="grid-2">
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Designation
+                                </label>
+
+                                <input
+                                    type="text"
+                                    name="designation"
+                                    id="edit_designation"
+                                    class="form-control"
+                                    required
+                                >
+
+                            </div>
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Phone
+                                </label>
+
+                                <input
+                                    type="text"
+                                    name="phone"
+                                    id="edit_phone"
+                                    class="form-control"
+                                >
+
+                            </div>
+
+                        </div>
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Address
+                            </label>
+
+                            <textarea
+                                name="address"
+                                id="edit_address"
+                                rows="2"
+                                class="form-control"
+                            ></textarea>
+
+                        </div>
+
+                        <hr
+                            style="
+                                border: none;
+                                border-top: 1px solid var(--border-color);
+                                margin: 1rem 0;
+                            "
+                        >
+
+                        <h4
+                            style="
+                                font-size: 0.9rem;
+                                font-weight: 700;
+                                color: var(--primary);
+                                margin-bottom: 0.75rem;
+                            "
+                        >
+                            Salary Structure (Monthly)
+                        </h4>
+
+                        <div class="form-group">
+
+                            <label class="form-label">
+                                Basic Salary (₹)
+                            </label>
+
+                            <input
+                                type="number"
+                                step="0.01"
+                                name="basic_salary"
+                                id="edit_basic_salary"
+                                class="form-control"
+                                required
+                            >
+
+                        </div>
+
+                        <div class="grid-2">
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Allowances (₹)
+                                </label>
+
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    name="allowances"
+                                    id="edit_allowances"
+                                    class="form-control"
+                                    value="0"
+                                >
+
+                            </div>
+
+                            <div class="form-group">
+
+                                <label class="form-label">
+                                    Deductions (₹)
+                                </label>
+
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    name="deductions"
+                                    id="edit_deductions"
+                                    class="form-control"
+                                    value="0"
+                                >
+
+                            </div>
+
+                        </div>
+
+                        <button
+                            type="submit"
+                            class="btn btn-primary"
+                            style="width: 100%; margin-top: 1rem;"
+                        >
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            Save Changes
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
+<<<<<<< HEAD
+        <!-- YOUR EDIT EMPLOYEE MODAL ENDS HERE -->
+
+
+        <script>
+        function openEditEmployeeModal(employee) {
+            document.getElementById('edit_user_id').value = employee.id || '';
+            document.getElementById('edit_name').value = employee.name || '';
+            document.getElementById('edit_designation').value = employee.designation || '';
+            document.getElementById('edit_phone').value = employee.phone || '';
+            document.getElementById('edit_address').value = employee.address || '';
+
+            document.getElementById('edit_basic_salary').value = employee.basic_salary || 0;
+            document.getElementById('edit_allowances').value = employee.allowances || 0;
+            document.getElementById('edit_deductions').value = employee.deductions || 0;
+
+            openModal('editEmployeeModal');
+        }
+        </script>
+
+
+
+
+
+        <?php include __DIR__ . '/includes/footer.php'; ?>
+
+    </div>
+
+</div>
+=======
+        <!-- Modal: View Full Employee Profile & Details -->
+        <div class="modal-overlay" id="viewEmployeeModal">
+            <div class="modal-card" style="max-width: 620px;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; padding: 1.25rem 1.5rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div id="vEmpAvatar" style="width: 52px; height: 52px; border-radius: 50%; background: #ffffff; color: var(--primary); font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); flex-shrink: 0;">
+                            E
+                        </div>
+                        <div>
+                            <h3 id="vEmpName" style="font-size: 1.3rem; font-weight: 800; margin: 0; color: #ffffff;">Employee Name</h3>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <span id="vEmpRole" class="role-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.2); color: #fff;">ROLE</span>
+                                <span id="vEmpStatus" class="status-pill active" style="font-size: 0.7rem;">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeModal('viewEmployeeModal')" style="color: #ffffff; font-size: 1.75rem;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <!-- Leave Allowance Summary Card -->
+                    <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-calculator"></i> Annual Leave Allowance Breakdown
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; text-align: center;">
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID REMAINING</div>
+                                <div id="vEmpPaidRemaining" style="font-size: 1.25rem; font-weight: 800; color: #10b981;">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID TAKEN</div>
+                                <div id="vEmpPaidUsed" style="font-size: 1.25rem; font-weight: 800; color: var(--primary);">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">UNPAID (LWP)</div>
+                                <div id="vEmpUnpaidUsed" style="font-size: 1.25rem; font-weight: 800; color: #f59e0b;">0 Days</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full Information Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Address</div>
+                            <strong id="vEmpEmail" style="word-break: break-all;">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Department</div>
+                            <strong id="vEmpDept">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Designation / Title</div>
+                            <strong id="vEmpDesignation">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Phone Number</div>
+                            <strong id="vEmpPhone">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Joining Date</div>
+                            <strong id="vEmpJoinDate">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Verification</div>
+                            <span id="vEmpVerified" class="status-pill active">Verified</span>
+                        </div>
+                    </div>
+
+                    <!-- Employee Attendance Log Timings -->
+                    <div style="margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                            <span><i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i> Attendance Timings History</span>
+                            <span style="font-size: 0.725rem; color: var(--text-muted); font-weight: 400;">(Recent Shifts)</span>
+                        </div>
+                        <div id="vEmpAttLogs" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('viewEmployeeModal')">Close Profile</button>
+                    </div>
                 </div>
             </div>
         </div>
 
+        <script>
+        function openViewEmployeeModal(emp) {
+            if (!emp) return;
+            document.getElementById('vEmpName').textContent = emp.name || 'N/A';
+            document.getElementById('vEmpAvatar').textContent = (emp.name || 'E').charAt(0).toUpperCase();
+            document.getElementById('vEmpRole').textContent = (emp.role || 'employee').toUpperCase();
+            document.getElementById('vEmpEmail').textContent = emp.email || 'N/A';
+            document.getElementById('vEmpDept').textContent = emp.department_name || 'General';
+            document.getElementById('vEmpDesignation').textContent = emp.designation || 'Staff Member';
+            document.getElementById('vEmpPhone').textContent = emp.phone || 'Not Provided';
+            document.getElementById('vEmpJoinDate').textContent = emp.join_date || 'N/A';
+            
+            // Status
+            const statusEl = document.getElementById('vEmpStatus');
+            statusEl.textContent = (emp.status || 'active').toUpperCase();
+            statusEl.className = 'status-pill ' + (emp.status === 'active' ? 'active' : 'inactive');
+
+            // Verification
+            const verEl = document.getElementById('vEmpVerified');
+            if (parseInt(emp.email_verified) === 1) {
+                verEl.textContent = '✅ Email Verified';
+                verEl.className = 'status-pill present';
+            } else {
+                verEl.textContent = '⚠️ Verification Pending';
+                verEl.className = 'status-pill pending';
+            }
+
+            // Leave Balances
+            const bal = emp.leave_balance || { paid_remaining: 18, paid_used: 0, unpaid_used: 0 };
+            document.getElementById('vEmpPaidRemaining').textContent = bal.paid_remaining + ' Days';
+            document.getElementById('vEmpPaidUsed').textContent = bal.paid_used + ' Days';
+            document.getElementById('vEmpUnpaidUsed').textContent = bal.unpaid_used + ' Days';
+
+            // Render Attendance Timings Logs
+            const logsContainer = document.getElementById('vEmpAttLogs');
+            logsContainer.innerHTML = '';
+            const logs = emp.attendance_history || [];
+
+            if (logs.length === 0) {
+                logsContainer.innerHTML = '<div style="padding: 0.75rem; text-align: center; color: var(--text-muted); font-size: 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm);">No attendance timing records found for this employee.</div>';
+            } else {
+                logs.forEach(log => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.8rem;';
+                    
+                    const statusClass = log.status ? log.status.toLowerCase() : 'present';
+                    const statusText = (log.status || 'present').replace('_', ' ').toUpperCase();
+                    
+                    item.innerHTML = `
+                        <div>
+                            <strong>${log.formatted_date || log.date}</strong>
+                            <div style="font-size: 0.725rem; color: var(--text-muted);">
+                                🕒 Clock In: <b>${log.formatted_in || log.clock_in}</b> • Out: <b>${log.formatted_out || (log.clock_out ? log.clock_out : 'In Progress')}</b>
+                                ${log.total_hours > 0 ? ` (${log.total_hours} hrs)` : ''}
+                            </div>
+                        </div>
+                        <span class="status-pill ${statusClass}" style="font-size: 0.65rem;">${statusText}</span>
+                    `;
+                    logsContainer.appendChild(item);
+                });
+            }
+
+            openModal('viewEmployeeModal');
+        }
+</script>
+<script>
+function prepareRejection(form) {
+    const comment = form.querySelector(
+        'textarea[name="review_comment"]'
+    );
+
+    if (!comment || comment.value.trim().length < 5) {
+        alert(
+            "Please enter at least 5 characters as the rejection reason."
+        );
+
+        if (comment) {
+            comment.focus();
+        }
+
+        return false;
+    }
+
+    const button = form.querySelector(
+        'button[type="submit"]'
+    );
+
+    if (button) {
+        button.disabled = true;
+        button.innerHTML =
+            '<i class="fa-solid fa-spinner fa-spin"></i> Rejecting...';
+    }
+
+    return true;
+}
+</script>
         <?php include __DIR__ . '/includes/footer.php'; ?>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
