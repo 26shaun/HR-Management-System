@@ -38,6 +38,10 @@ $employeesStmt = $db->query("
     ORDER BY u.id DESC
 ");
 $employees = $employeesStmt->fetchAll();
+foreach ($employees as &$emp) {
+    $emp['leave_balance'] = getUserLeaveBalance($emp['id']);
+}
+unset($emp);
 
 // 3. Fetch Pending & Recent Leaves
 $leavesStmt = $db->query("
@@ -529,16 +533,18 @@ include __DIR__ . '/includes/header.php';
                                 <?php foreach ($employees as $emp): ?>
                                     <tr>
                                         <td>
-                                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                            <div style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="Click to view full employee profile">
                                                 <div class="user-mini-avatar"
-                                                    style="width: 34px; height: 34px; font-size: 0.8rem;">
+                                                    style="width: 36px; height: 36px; font-size: 0.85rem; background: var(--primary-gradient); color: #ffffff; cursor: pointer;">
                                                     <?= strtoupper(substr($emp['name'], 0, 1)) ?>
                                                 </div>
                                                 <div>
-                                                    <div style="font-weight: 600;"><?= htmlspecialchars($emp['name']) ?>
+                                                    <div style="font-weight: 600; color: var(--primary); text-decoration: underline; text-underline-offset: 2px;">
+                                                        <?= htmlspecialchars($emp['name']) ?>
                                                     </div>
                                                     <div style="font-size: 0.75rem; color: var(--text-muted);">
-                                                        <?= htmlspecialchars($emp['email']) ?></div>
+                                                        <?= htmlspecialchars($emp['email']) ?>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -558,20 +564,23 @@ include __DIR__ . '/includes/header.php';
                                             </span>
                                         </td>
                                         <td>
-                                            <?php if ($emp['id'] !== $currentUser['id']): ?>
-                                                <form action="actions/employee_action.php" method="POST"
-                                                    onsubmit="return confirm('Are you sure you want to remove this employee account?');"
-                                                    style="display: inline;">
-                                                    <input type="hidden" name="action" value="delete_employee">
-                                                    <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
-                                                    <button type="submit" class="btn btn-secondary btn-sm"
-                                                        style="color: #ef4444; padding: 4px 8px;" title="Delete">
-                                                        <i class="fa-regular fa-trash-can"></i>
-                                                    </button>
-                                                </form>
-                                            <?php else: ?>
-                                                <span style="font-size: 0.75rem; color: var(--text-light);">You</span>
-                                            <?php endif; ?>
+                                            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                <button type="button" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="View Full Details">
+                                                    <i class="fa-regular fa-eye"></i> Details
+                                                </button>
+                                                <?php if ($emp['id'] !== $currentUser['id']): ?>
+                                                    <form action="actions/employee_action.php" method="POST"
+                                                        onsubmit="return confirm('Are you sure you want to remove this employee account?');"
+                                                        style="display: inline;">
+                                                        <input type="hidden" name="action" value="delete_employee">
+                                                        <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
+                                                        <button type="submit" class="btn btn-secondary btn-sm"
+                                                            style="color: #ef4444; padding: 4px 8px;" title="Delete">
+                                                            <i class="fa-regular fa-trash-can"></i>
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -774,5 +783,122 @@ include __DIR__ . '/includes/header.php';
                 </div>
             </div>
         </div>
+
+        <!-- Modal: View Full Employee Profile & Details -->
+        <div class="modal-overlay" id="viewEmployeeModal">
+            <div class="modal-card" style="max-width: 620px;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; padding: 1.25rem 1.5rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div id="vEmpAvatar" style="width: 52px; height: 52px; border-radius: 50%; background: #ffffff; color: var(--primary); font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); flex-shrink: 0;">
+                            E
+                        </div>
+                        <div>
+                            <h3 id="vEmpName" style="font-size: 1.3rem; font-weight: 800; margin: 0; color: #ffffff;">Employee Name</h3>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <span id="vEmpRole" class="role-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.2); color: #fff;">ROLE</span>
+                                <span id="vEmpStatus" class="status-pill active" style="font-size: 0.7rem;">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeModal('viewEmployeeModal')" style="color: #ffffff; font-size: 1.75rem;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <!-- Leave Allowance Summary Card -->
+                    <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-calculator"></i> Annual Leave Allowance Breakdown
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; text-align: center;">
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID REMAINING</div>
+                                <div id="vEmpPaidRemaining" style="font-size: 1.25rem; font-weight: 800; color: #10b981;">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID TAKEN</div>
+                                <div id="vEmpPaidUsed" style="font-size: 1.25rem; font-weight: 800; color: var(--primary);">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">UNPAID (LWP)</div>
+                                <div id="vEmpUnpaidUsed" style="font-size: 1.25rem; font-weight: 800; color: #f59e0b;">0 Days</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full Information Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Address</div>
+                            <strong id="vEmpEmail" style="word-break: break-all;">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Department</div>
+                            <strong id="vEmpDept">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Designation / Title</div>
+                            <strong id="vEmpDesignation">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Phone Number</div>
+                            <strong id="vEmpPhone">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Joining Date</div>
+                            <strong id="vEmpJoinDate">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Verification</div>
+                            <span id="vEmpVerified" class="status-pill active">Verified</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('viewEmployeeModal')">Close Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        function openViewEmployeeModal(emp) {
+            if (!emp) return;
+            document.getElementById('vEmpName').textContent = emp.name || 'N/A';
+            document.getElementById('vEmpAvatar').textContent = (emp.name || 'E').charAt(0).toUpperCase();
+            document.getElementById('vEmpRole').textContent = (emp.role || 'employee').toUpperCase();
+            document.getElementById('vEmpEmail').textContent = emp.email || 'N/A';
+            document.getElementById('vEmpDept').textContent = emp.department_name || 'General';
+            document.getElementById('vEmpDesignation').textContent = emp.designation || 'Staff Member';
+            document.getElementById('vEmpPhone').textContent = emp.phone || 'Not Provided';
+            document.getElementById('vEmpJoinDate').textContent = emp.join_date || 'N/A';
+            
+            // Status
+            const statusEl = document.getElementById('vEmpStatus');
+            statusEl.textContent = (emp.status || 'active').toUpperCase();
+            statusEl.className = 'status-pill ' + (emp.status === 'active' ? 'active' : 'inactive');
+
+            // Verification
+            const verEl = document.getElementById('vEmpVerified');
+            if (parseInt(emp.email_verified) === 1) {
+                verEl.textContent = '✅ Email Verified';
+                verEl.className = 'status-pill present';
+            } else {
+                verEl.textContent = '⚠️ Verification Pending';
+                verEl.className = 'status-pill pending';
+            }
+
+            // Leave Balances
+            const bal = emp.leave_balance || { paid_remaining: 18, paid_used: 0, unpaid_used: 0 };
+            document.getElementById('vEmpPaidRemaining').textContent = bal.paid_remaining + ' Days';
+            document.getElementById('vEmpPaidUsed').textContent = bal.paid_used + ' Days';
+            document.getElementById('vEmpUnpaidUsed').textContent = bal.unpaid_used + ' Days';
+
+            openModal('viewEmployeeModal');
+        }
+        </script>
 
         <?php include __DIR__ . '/includes/footer.php'; ?>
