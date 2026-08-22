@@ -421,18 +421,16 @@ include __DIR__ . '/includes/header.php';
                                         </td>
 
                                         <td>
-                                            <?php if (!empty($l['payment_type'])): ?>
-                                                <span class="status-pill <?=
-                                                    $l['payment_type'] === 'paid'
-                                                    ? 'active'
-                                                    : 'rejected'
-                                                    ?>">
-                                                    <?= ucfirst($l['payment_type']) ?>
-                                                    Leave
+                                            <?php 
+                                                $isPaidLeave = ($l['leave_category'] ?? ($l['is_paid'] ?? 1) == 1) === 'paid' || ($l['is_paid'] ?? 1) == 1;
+                                            ?>
+                                            <?php if ($isPaidLeave): ?>
+                                                <span class="status-pill present" style="font-size: 0.75rem; padding: 3px 8px;">
+                                                    <i class="fa-solid fa-circle-check"></i> Paid Leave
                                                 </span>
                                             <?php else: ?>
-                                                <span style="color: var(--text-muted); font-size: 0.8rem;">
-                                                    Not assigned
+                                                <span class="status-pill pending" style="font-size: 0.75rem; padding: 3px 8px; background: rgba(245, 158, 11, 0.15); color: #b45309;">
+                                                    <i class="fa-solid fa-coins"></i> Unpaid (LWP)
                                                 </span>
                                             <?php endif; ?>
                                         </td>

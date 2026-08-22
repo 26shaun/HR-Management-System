@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS `attendance` (
 CREATE TABLE IF NOT EXISTS `leaves` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `user_id` INT NOT NULL,
-    `leave_type` ENUM('Casual Leave', 'Sick Leave', 'Annual Leave', 'Maternity/Paternity', 'Emergency') NOT NULL,
+    `leave_type` ENUM('Casual Leave', 'Sick Leave', 'Annual Leave', 'Maternity/Paternity', 'Emergency', 'Loss of Pay (Unpaid)') NOT NULL,
+    `leave_category` ENUM('paid', 'unpaid') NOT NULL DEFAULT 'paid',
+    `is_paid` TINYINT(1) NOT NULL DEFAULT 1,
     `start_date` DATE NOT NULL,
     `end_date` DATE NOT NULL,
     `total_days` INT NOT NULL DEFAULT 1,

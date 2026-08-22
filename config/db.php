@@ -147,11 +147,75 @@ function formatNiceDate($dateStr)
     return date('M d, Y', $timestamp);
 }
 
+// Annual Paid Leave Allowance Cap (Days)
+define('TOTAL_PAID_LEAVE_ALLOWANCE', 18);
+
 function formatTime($timeStr)
 {
     if (empty($timeStr))
         return '-';
     return date('h:i A', strtotime($timeStr));
+}
+
+/**
+ * Paid vs Unpaid Leave Allowance Calculation Helper
+ */
+function getUserLeaveBalance($userId)
+{
+    $db = getDBConnection();
+    if (!$db) {
+        return [
+            'total_allowance' => TOTAL_PAID_LEAVE_ALLOWANCE,
+            'paid_used' => 0,
+            'paid_remaining' => TOTAL_PAID_LEAVE_ALLOWANCE,
+            'unpaid_used' => 0,
+            'pending_paid' => 0,
+            'pending_unpaid' => 0
+        ];
+    }
+
+    // Approved Paid Leaves
+    $stmtPaid = $db->prepare("
+        SELECT COALESCE(SUM(total_days), 0) FROM leaves 
+        WHERE user_id = ? AND status = 'approved' AND (is_paid = 1 OR leave_category = 'paid')
+    ");
+    $stmtPaid->execute([$userId]);
+    $paidUsed = (int)$stmtPaid->fetchColumn();
+
+    // Approved Unpaid Leaves (LWP)
+    $stmtUnpaid = $db->prepare("
+        SELECT COALESCE(SUM(total_days), 0) FROM leaves 
+        WHERE user_id = ? AND status = 'approved' AND (is_paid = 0 OR leave_category = 'unpaid')
+    ");
+    $stmtUnpaid->execute([$userId]);
+    $unpaidUsed = (int)$stmtUnpaid->fetchColumn();
+
+    // Pending Paid Leaves
+    $stmtPendingPaid = $db->prepare("
+        SELECT COALESCE(SUM(total_days), 0) FROM leaves 
+        WHERE user_id = ? AND status = 'pending' AND (is_paid = 1 OR leave_category = 'paid')
+    ");
+    $stmtPendingPaid->execute([$userId]);
+    $pendingPaid = (int)$stmtPendingPaid->fetchColumn();
+
+    // Pending Unpaid Leaves
+    $stmtPendingUnpaid = $db->prepare("
+        SELECT COALESCE(SUM(total_days), 0) FROM leaves 
+        WHERE user_id = ? AND status = 'pending' AND (is_paid = 0 OR leave_category = 'unpaid')
+    ");
+    $stmtPendingUnpaid->execute([$userId]);
+    $pendingUnpaid = (int)$stmtPendingUnpaid->fetchColumn();
+
+    $remaining = max(0, TOTAL_PAID_LEAVE_ALLOWANCE - $paidUsed);
+
+    return [
+        'total_allowance' => TOTAL_PAID_LEAVE_ALLOWANCE,
+        'paid_used' => $paidUsed,
+        'paid_remaining' => $remaining,
+        'unpaid_used' => $unpaidUsed,
+        'pending_paid' => $pendingPaid,
+        'pending_unpaid' => $pendingUnpaid
+    ];
 }
 
 /**

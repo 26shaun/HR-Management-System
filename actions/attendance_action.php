@@ -45,10 +45,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 formatTime($existingAttendance['clock_in']) .
                 ".";
         } else {
-            // Mark as late when checking in after 9:15 AM
-            $status = strtotime($nowTime) > strtotime('09:15:00')
-                ? 'late'
-                : 'present';
+            // Mark as late when checking in after 9:30 AM
+            $isLate = strtotime($nowTime) > strtotime('09:30:00');
+            $status = $isLate ? 'late' : 'present';
 
             $insertStatement = $db->prepare("
                 INSERT INTO attendance (
@@ -67,10 +66,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $status
             ]);
 
-            $_SESSION['flash_success'] =
-                "Checked in successfully at " .
-                formatTime($nowTime) .
-                ".";
+            if ($isLate) {
+                $_SESSION['flash_warning'] = "Checked in at " . formatTime($nowTime) . " (Marked as Late - Check-in cutoff is 9:30 AM).";
+            } else {
+                $_SESSION['flash_success'] = "Checked in successfully at " . formatTime($nowTime) . " (On Time).";
+            }
         }
 
         header("Location: " . $dashboardPage);
