@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `attendance` (
     `clock_in` TIME DEFAULT NULL,
     `clock_out` TIME DEFAULT NULL,
     `total_hours` DECIMAL(4,2) DEFAULT 0.00,
-    `status` ENUM('present', 'late', 'half_day', 'absent') DEFAULT 'present',
+    `status` ENUM('present', 'late', 'half_day', 'absent', 'on_leave') DEFAULT 'present',
     `notes` TEXT,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY `unique_user_date` (`user_id`, `date`),
