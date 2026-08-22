@@ -836,7 +836,6 @@ include __DIR__ . '/includes/header.php';
             </div>
         </div>
 
-<<<<<<< HEAD
         <!-- Modal: View Full Employee Profile & Details -->
         <div class="modal-overlay" id="viewEmployeeModal">
             <div class="modal-card" style="max-width: 620px;">
@@ -952,26 +951,17 @@ include __DIR__ . '/includes/header.php';
 
             openModal('viewEmployeeModal');
         }
-=======
-        <script>
-            function toggleRejectForm(leaveId) {
-                const form = document.getElementById('rejectForm' + leaveId);
 
-                if (!form) {
-                    return;
-                }
-
-                const isHidden = form.style.display === 'none' || form.style.display === '';
-                form.style.display = isHidden ? 'block' : 'none';
-
-                if (isHidden) {
-                    const commentBox = form.querySelector('textarea[name="review_comment"]');
-                    if (commentBox) {
-                        commentBox.focus();
-                    }
-                }
+        function toggleRejectForm(leaveId) {
+            const form = document.getElementById('rejectForm' + leaveId);
+            if (!form) return;
+            const isHidden = form.style.display === 'none' || form.style.display === '';
+            form.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) {
+                const commentBox = form.querySelector('textarea[name="review_comment"]');
+                if (commentBox) commentBox.focus();
             }
->>>>>>> 5a47913f0d87b3a4a96e81912883746bdfb14eec
+        }
         </script>
 
         <?php include __DIR__ . '/includes/footer.php'; ?>
