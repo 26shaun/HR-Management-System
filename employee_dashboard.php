@@ -4,7 +4,7 @@ requireAuth();
 
 $currentUser = getCurrentUser();
 $pageTitle = "Employee Self-Service Portal";
-$pageSubtitle = "Welcome back, " . htmlspecialchars($currentUser['name']);
+$pageSubtitle = "Welcome back, " . htmlspecialchars($currentUser['name'] ?? '');
 
 $db = getDBConnection();
 $today = date('Y-m-d');
@@ -38,7 +38,7 @@ $announcementsStmt = $db->query("
     JOIN users u ON a.created_by = u.id 
     ORDER BY a.created_at DESC LIMIT 5
 ");
-$announcements = $announcementsStmt->fetchAll();
+$announcements = $announcementsStmt ? $announcementsStmt->fetchAll() : [];
 
 // 5. Fetch User Notifications
 $myNotifications = getUserNotifications($userId, 10);
@@ -46,7 +46,7 @@ $myNotifications = getUserNotifications($userId, 10);
 // 6. Fetch Paid vs Unpaid Leave Allowance Balance
 $leaveBalance = getUserLeaveBalance($userId);
 
-// 5. Metrics calculation
+// 7. Metrics calculation
 $leavesTakenCount = 0;
 $pendingLeavesCount = 0;
 foreach ($myLeaves as $l) {
@@ -155,30 +155,89 @@ include __DIR__ . '/includes/header.php';
                                 <i class="fa-solid fa-id-card" style="color: var(--primary);"></i>
                                 Employment Profile
                             </div>
-                            <span class="role-badge employee"><?= strtoupper($currentUser['role']) ?></span>
+                            <span class="role-badge employee"><?= strtoupper($currentUser['role'] ?? 'EMPLOYEE') ?></span>
                         </div>
 
                         <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem;">
                             <div class="user-mini-avatar" style="width: 52px; height: 52px; font-size: 1.25rem;">
-                                <?= strtoupper(substr($currentUser['name'], 0, 1)) ?>
+                                <?= strtoupper(substr($currentUser['name'] ?? 'U', 0, 1)) ?>
                             </div>
                             <div>
-                                <h3 style="font-size: 1.1rem; margin-bottom: 2px;"><?= htmlspecialchars($currentUser['name']) ?></h3>
+                                <h3 style="font-size: 1.1rem; margin-bottom: 2px;"><?= htmlspecialchars($currentUser['name'] ?? '') ?></h3>
                                 <div style="font-size: 0.85rem; color: var(--text-muted);"><?= htmlspecialchars($currentUser['designation'] ?? 'Staff') ?></div>
                                 <div style="font-size: 0.75rem; color: var(--primary); font-weight: 600;"><?= htmlspecialchars($currentUser['department_name'] ?? 'General') ?></div>
                             </div>
                         </div>
 
                         <div style="font-size: 0.825rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; padding: 0.75rem; background: var(--bg-main); border-radius: var(--radius-md);">
-                            <div><strong>Email:</strong> <?= htmlspecialchars($currentUser['email']) ?></div>
-                            <div><strong>Joined:</strong> <?= formatNiceDate($currentUser['join_date']) ?></div>
-                            <div><strong>Status:</strong> <span class="status-pill active" style="font-size: 0.7rem;"><?= ucfirst($currentUser['status']) ?></span></div>
+                            <div><strong>Email:</strong> <?= htmlspecialchars($currentUser['email'] ?? '') ?></div>
+                            <div><strong>Joined:</strong> <?= formatNiceDate($currentUser['join_date'] ?? '') ?></div>
+                            <div><strong>Status:</strong> <span class="status-pill active" style="font-size: 0.7rem;"><?= ucfirst($currentUser['status'] ?? 'Active') ?></span></div>
                         </div>
                     </div>
 
                     <button class="btn btn-primary" onclick="openModal('applyLeaveModal')" style="margin-top: 1rem;">
                         <i class="fa-solid fa-paper-plane"></i> Apply for Leave
                     </button>
+                </div>
+            </div>
+
+            <!-- Profile Edit & Salary Details Row -->
+            <div class="grid-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Personal & Contact Details (Self-Editable) -->
+                <div class="card">
+                    <div class="card-header" style="margin-bottom: 1rem;">
+                        <div class="card-title">
+                            <i class="fa-solid fa-user-pen" style="color: var(--primary);"></i> Contact & Personal Info
+                        </div>
+                    </div>
+                    <form action="actions/employee_action.php" method="POST">
+                        <input type="hidden" name="update_self_profile" value="1">
+                        
+                        <div class="form-group" style="margin-bottom: 0.75rem;">
+                            <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Phone Number</label>
+                            <input type="text" name="phone" class="form-control" value="<?= htmlspecialchars($currentUser['phone'] ?? ''); ?>" placeholder="e.g. +91 9876543210">
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label" style="font-size: 0.8rem; color: var(--text-muted);">Home Address</label>
+                            <textarea name="address" rows="2" class="form-control" placeholder="Enter residential address"><?= htmlspecialchars($currentUser['address'] ?? ''); ?></textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-secondary btn-sm">
+                            <i class="fa-solid fa-floppy-disk"></i> Update Contact Info
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Read-Only Salary Breakdown -->
+                <div class="card">
+                    <div class="card-header" style="margin-bottom: 1rem;">
+                        <div class="card-title">
+                            <i class="fa-solid fa-wallet" style="color: var(--primary);"></i> My Salary Structure (Read-Only)
+                        </div>
+                    </div>
+                    <table class="custom-table" style="font-size: 0.875rem; margin-bottom: 0.75rem;">
+                        <tbody>
+                            <tr>
+                                <td style="color: var(--text-muted);">Basic Monthly Salary</td>
+                                <td style="text-align: right; font-weight: 600;">₹<?= number_format((float)($currentUser['basic_salary'] ?? 0), 2); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--text-muted);">Allowances</td>
+                                <td style="text-align: right; color: #10b981; font-weight: 600;">+ ₹<?= number_format((float)($currentUser['allowances'] ?? 0), 2); ?></td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--text-muted);">Deductions / Taxes</td>
+                                <td style="text-align: right; color: #ef4444; font-weight: 600;">- ₹<?= number_format((float)($currentUser['deductions'] ?? 0), 2); ?></td>
+                            </tr>
+                            <tr style="background: var(--bg-main);">
+                                <td><strong>Net Take-Home Salary</strong></td>
+                                <td style="text-align: right;"><strong style="color: var(--primary); font-size: 1.05rem;">₹<?= number_format((float)($currentUser['net_salary'] ?? 0), 2); ?></strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">Contact the HR department for any discrepancies in your salary structure.</span>
                 </div>
             </div>
 
@@ -358,22 +417,26 @@ include __DIR__ . '/includes/header.php';
                         </div>
 
                         <div style="display: flex; flex-direction: column; gap: 0.85rem; max-height: 280px; overflow-y: auto;">
-                            <?php foreach ($announcements as $ann): ?>
-                                <div style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff;">
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
-                                        <strong style="font-size: 0.875rem;"><?= htmlspecialchars($ann['title']) ?></strong>
-                                        <span class="status-pill <?= $ann['category'] === 'urgent' ? 'rejected' : ($ann['category'] === 'event' ? 'on_leave' : 'active') ?>" style="font-size: 0.65rem;">
-                                            <?= ucfirst($ann['category']) ?>
-                                        </span>
+                            <?php if (empty($announcements)): ?>
+                                <p style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">No notices posted yet.</p>
+                            <?php else: ?>
+                                <?php foreach ($announcements as $ann): ?>
+                                    <div style="padding: 0.85rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff;">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem;">
+                                            <strong style="font-size: 0.875rem;"><?= htmlspecialchars($ann['title']) ?></strong>
+                                            <span class="status-pill <?= $ann['category'] === 'urgent' ? 'rejected' : ($ann['category'] === 'event' ? 'on_leave' : 'active') ?>" style="font-size: 0.65rem;">
+                                                <?= ucfirst($ann['category']) ?>
+                                            </span>
+                                        </div>
+                                        <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+                                            <?= nl2br(htmlspecialchars($ann['content'])) ?>
+                                        </p>
+                                        <div style="font-size: 0.725rem; color: var(--text-light); text-align: right;">
+                                            <?= formatNiceDate($ann['created_at']) ?>
+                                        </div>
                                     </div>
-                                    <p style="font-size: 0.825rem; color: var(--text-muted); margin-bottom: 0.4rem;">
-                                        <?= nl2br(htmlspecialchars($ann['content'])) ?>
-                                    </p>
-                                    <div style="font-size: 0.725rem; color: var(--text-light); text-align: right;">
-                                        <?= formatNiceDate($ann['created_at']) ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </div>
                     </div>
 

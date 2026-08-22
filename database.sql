@@ -127,3 +127,16 @@ INSERT IGNORE INTO `attendance` (`user_id`, `date`, `clock_in`, `clock_out`, `to
 (2, CURRENT_DATE, '09:02:10', NULL, 0.00, 'present'),
 (3, CURRENT_DATE, '09:35:00', NULL, 0.00, 'late'),
 (4, CURRENT_DATE, '08:55:00', NULL, 0.00, 'present');
+
+
+
+-- Add personal and salary fields to users table (or profiles table if separated)
+ALTER TABLE users 
+ADD COLUMN phone VARCHAR(20) DEFAULT NULL,
+ADD COLUMN address TEXT DEFAULT NULL,
+ADD COLUMN department VARCHAR(100) DEFAULT NULL,
+ADD COLUMN designation VARCHAR(100) DEFAULT NULL,
+ADD COLUMN basic_salary DECIMAL(10,2) DEFAULT 0.00,
+ADD COLUMN allowances DECIMAL(10,2) DEFAULT 0.00,
+ADD COLUMN deductions DECIMAL(10,2) DEFAULT 0.00,
+ADD COLUMN net_salary DECIMAL(10,2) GENERATED ALWAYS AS (basic_salary + allowances - deductions) STORED;
