@@ -24,6 +24,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $stmt->execute([$title, $content, $category, $currentUser['id']]);
 
+        // Broadcast in-website notification to all team members
+        $snippet = mb_strimwidth($content, 0, 75, '...');
+        broadcastNotification("📢 " . $title, $snippet, 'announcement', 'employee_dashboard.php#companyFeed');
+
         $_SESSION['flash_success'] = "Announcement published to company portal!";
         header("Location: ../hr_dashboard.php#announcementsSection");
         exit;

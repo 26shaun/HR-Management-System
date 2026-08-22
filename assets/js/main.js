@@ -75,25 +75,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 4. Quick Demo Login Fillers
-    window.fillDemoCredentials = function(role) {
-        const emailInput = document.getElementById('loginEmail');
-        const passwordInput = document.getElementById('loginPassword');
-        if (!emailInput || !passwordInput) return;
+    // 4. In-Website Notification Dropdown Toggle
+    const notifBellBtn = document.getElementById('notifBellBtn');
+    const notifDropdown = document.getElementById('notifDropdown');
 
-        if (role === 'hr') {
-            emailInput.value = 'hr@dayflow.com';
-            passwordInput.value = 'password123';
-        } else if (role === 'employee') {
-            emailInput.value = 'alex@dayflow.com';
-            passwordInput.value = 'password123';
-        }
+    if (notifBellBtn && notifDropdown) {
+        notifBellBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = notifDropdown.style.display === 'block';
+            notifDropdown.style.display = isOpen ? 'none' : 'block';
+        });
 
-        // Highlight form button
-        const submitBtn = document.getElementById('loginSubmitBtn');
-        if (submitBtn) {
-            submitBtn.classList.add('pulse-focus');
-            setTimeout(() => submitBtn.classList.remove('pulse-focus'), 1000);
-        }
-    };
+        document.addEventListener('click', (e) => {
+            if (!notifDropdown.contains(e.target) && e.target !== notifBellBtn) {
+                notifDropdown.style.display = 'none';
+            }
+        });
+    }
 });

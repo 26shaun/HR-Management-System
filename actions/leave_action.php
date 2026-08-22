@@ -37,6 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ");
         $stmt->execute([$currentUser['id'], $leaveType, $startDate, $endDate, $totalDays, $reason]);
 
+        // Notify HR Admins
+        notifyHRAdmins(
+            "📋 New Leave Application",
+            $currentUser['name'] . " applied for " . $leaveType . " (" . $totalDays . " days: " . formatNiceDate($startDate) . " to " . formatNiceDate($endDate) . ").",
+            'leave_applied',
+            'hr_dashboard.php#leavesSection'
+        );
+
         $_SESSION['flash_success'] = "Leave request submitted successfully for approval.";
         header("Location: ../employee_dashboard.php#myLeavesSection");
         exit;
@@ -55,12 +63,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // Fetch leave details to notify the employee
+        $leaveDetails = $db->prepare("SELECT user_id, leave_type, start_date, end_date FROM leaves WHERE id = ?");
+        $leaveDetails->execute([$leaveId]);
+        $leave = $leaveDetails->fetch();
+
         $stmt = $db->prepare("
             UPDATE leaves 
             SET status = ?, reviewed_by = ?, review_comment = ? 
             WHERE id = ?
         ");
         $stmt->execute([$status, $currentUser['id'], $comment, $leaveId]);
+
+        // Notify Employee
+        if ($leave) {
+            $statusEmoji = ($status === 'approved') ? '✅' : '❌';
+            $msg = "Your {$leave['leave_type']} request (" . formatNiceDate($leave['start_date']) . " to " . formatNiceDate($leave['end_date']) . ") was " . strtoupper($status) . " by HR.";
+            if (!empty($comment)) {
+                $msg .= " Note: " . $comment;
+            }
+            createNotification(
+                $leave['user_id'],
+                "{$statusEmoji} Leave Request " . ucfirst($status),
+                $msg,
+                ($status === 'approved' ? 'leave_approved' : 'leave_rejected'),
+                'employee_dashboard.php#myLeavesSection'
+            );
+        }
 
         $_SESSION['flash_success'] = "Leave request marked as " . ucfirst($status) . ".";
         header("Location: ../hr_dashboard.php#leavesSection");

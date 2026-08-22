@@ -40,6 +40,9 @@ $announcementsStmt = $db->query("
 ");
 $announcements = $announcementsStmt->fetchAll();
 
+// 5. Fetch User Notifications
+$myNotifications = getUserNotifications($userId, 10);
+
 // 5. Metrics calculation
 $leavesTakenCount = 0;
 $pendingLeavesCount = 0;
@@ -277,8 +280,54 @@ include __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
-                <!-- Company Announcements & Attendance Log -->
+                <!-- Company Announcements & Notifications -->
                 <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <!-- My In-Website Notifications Card -->
+                    <div class="card" id="notificationsSection">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <i class="fa-solid fa-bell" style="color: var(--primary);"></i>
+                                My Notifications
+                            </div>
+                            <?php if (!empty($myNotifications)): ?>
+                                <form action="actions/notification_action.php" method="POST" style="margin: 0;">
+                                    <input type="hidden" name="action" value="mark_all_read">
+                                    <button type="submit" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 2px 8px;">
+                                        Mark All Read
+                                    </button>
+                                </form>
+                            <?php endif; ?>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 280px; overflow-y: auto;">
+                            <?php if (empty($myNotifications)): ?>
+                                <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1rem;">
+                                    <i class="fa-regular fa-bell-slash" style="font-size: 1.5rem; opacity: 0.4; margin-bottom: 0.35rem; display: block;"></i>
+                                    No notifications yet
+                                </div>
+                            <?php else: ?>
+                                <?php foreach ($myNotifications as $n): ?>
+                                    <div style="padding: 0.75rem 0.85rem; border: 1px solid <?= $n['is_read'] ? 'var(--border-color)' : 'rgba(99, 102, 241, 0.3)' ?>; border-radius: var(--radius-md); background: <?= $n['is_read'] ? '#ffffff' : 'rgba(99, 102, 241, 0.05)' ?>; position: relative;">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
+                                            <strong style="font-size: 0.85rem; color: var(--text-main); font-weight: <?= $n['is_read'] ? '600' : '700' ?>;">
+                                                <?= htmlspecialchars($n['title']) ?>
+                                            </strong>
+                                            <?php if (!$n['is_read']): ?>
+                                                <span class="status-pill pending" style="font-size: 0.6rem; padding: 1px 6px;">New</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.35rem; line-height: 1.4;">
+                                            <?= htmlspecialchars($n['message']) ?>
+                                        </p>
+                                        <div style="font-size: 0.7rem; color: var(--text-light); text-align: right;">
+                                            <?= formatNiceDate($n['created_at']) ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
                     <!-- Announcements -->
                     <div class="card" id="companyFeed">
                         <div class="card-header">

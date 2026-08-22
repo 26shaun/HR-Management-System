@@ -142,6 +142,7 @@ a:hover {
 .brand-text {
   background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -804,4 +805,28 @@ a:hover {
   .stat-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Notification Dropdown Styles */
+.notification-wrapper {
+  position: relative;
+}
+
+.notif-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 360px;
+  max-width: 90vw;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color);
+  z-index: 99999 !important;
+  overflow: hidden;
+}
+
+.notif-dropdown.show {
+  display: block !important;
 }
