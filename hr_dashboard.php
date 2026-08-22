@@ -475,25 +475,24 @@ include __DIR__ . '/includes/header.php';
 
                                                 
                                                    <!-- Reject button -->
-<div>
-    <button
-        type="button"
-        class="btn btn-danger btn-sm"
-        onclick="toggleRejectForm(<?= (int)$l['id'] ?>)"
-    >
+<details class="reject-details">
+    <summary class="btn btn-danger btn-sm">
         <i class="fa-solid fa-xmark"></i>
         Reject
-    </button>
+    </summary>
 
-    <!-- Rejection comment form -->
     <form
-        id="rejectForm<?= (int)$l['id'] ?>"
         action="actions/leave_action.php"
         method="POST"
+        onsubmit="return prepareRejection(this)"
+        
         style="
-            display: none;
-            margin-top: 0.6rem;
+            margin-top: 0.7rem;
             min-width: 230px;
+            padding: 0.75rem;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff7f7;
         "
     >
         <input
@@ -514,33 +513,37 @@ include __DIR__ . '/includes/header.php';
             value="rejected"
         >
 
+        <label
+            for="rejectComment<?= (int)$l['id'] ?>"
+            style="
+                display: block;
+                margin-bottom: 0.4rem;
+                font-size: 0.8rem;
+                font-weight: 600;
+            "
+        >
+            Reason for rejection
+        </label>
+
         <textarea
+            id="rejectComment<?= (int)$l['id'] ?>"
             name="review_comment"
             class="form-control"
             rows="3"
-            placeholder="Enter the reason for rejecting this leave"
-            required
             minlength="5"
-            style="margin-bottom: 0.5rem;"
+            placeholder="Explain why this leave is being rejected"
+            required
+            style="margin-bottom: 0.6rem;"
         ></textarea>
 
-        <div style="display: flex; gap: 0.4rem;">
-            <button
-                type="submit"
-                class="btn btn-danger btn-sm"
-            >
-                Confirm rejection
-            </button>
-
-            <button
-                type="button"
-                class="btn btn-secondary btn-sm"
-                onclick="toggleRejectForm(<?= (int)$l['id'] ?>)"
-            >
-                Cancel
-            </button>
-        </div>
-                                                    </form>
+        <button
+            type="submit"
+            class="btn btn-danger btn-sm"
+        >
+            Confirm rejection
+        </button>
+    </form>
+</details>
                                                 </div>
                                             </div>
                                         <?php else: ?>
@@ -951,17 +954,36 @@ include __DIR__ . '/includes/header.php';
 
             openModal('viewEmployeeModal');
         }
+</script>
+<script>
+function prepareRejection(form) {
+    const comment = form.querySelector(
+        'textarea[name="review_comment"]'
+    );
 
-        function toggleRejectForm(leaveId) {
-            const form = document.getElementById('rejectForm' + leaveId);
-            if (!form) return;
-            const isHidden = form.style.display === 'none' || form.style.display === '';
-            form.style.display = isHidden ? 'block' : 'none';
-            if (isHidden) {
-                const commentBox = form.querySelector('textarea[name="review_comment"]');
-                if (commentBox) commentBox.focus();
-            }
+    if (!comment || comment.value.trim().length < 5) {
+        alert(
+            "Please enter at least 5 characters as the rejection reason."
+        );
+
+        if (comment) {
+            comment.focus();
         }
-        </script>
 
+        return false;
+    }
+
+    const button = form.querySelector(
+        'button[type="submit"]'
+    );
+
+    if (button) {
+        button.disabled = true;
+        button.innerHTML =
+            '<i class="fa-solid fa-spinner fa-spin"></i> Rejecting...';
+    }
+
+    return true;
+}
+</script>
         <?php include __DIR__ . '/includes/footer.php'; ?>
