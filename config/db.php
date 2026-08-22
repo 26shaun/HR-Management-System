@@ -339,5 +339,4 @@ function sendOtpEmail($toEmail, $toName, $otpCode)
     );
 
     return $mailer->send($toEmail, $toName, $subject, $message);
-}
-?>
+}?>

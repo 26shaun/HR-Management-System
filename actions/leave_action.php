@@ -68,9 +68,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
-        $leaveCategory = ($paymentType === 'unpaid') ? 'unpaid' : 'paid';
-        $isPaid = ($leaveCategory === 'paid') ? 1 : 0;
+        if ($status === 'rejected' && strlen($comment) < 5) {
+    $_SESSION['flash_error'] =
+        "Please enter a reason for rejecting the leave.";
 
+    header(
+        "Location: ../hr_dashboard.php#leavesSection"
+    );
+
+    exit;
+}
         // Fetch leave details to notify the employee
         $leaveDetails = $db->prepare("SELECT user_id, leave_type, start_date, end_date, total_days FROM leaves WHERE id = ?");
         $leaveDetails->execute([$leaveId]);

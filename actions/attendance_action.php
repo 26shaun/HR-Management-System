@@ -12,7 +12,7 @@ $action = $_POST['action'] ?? $_GET['action'] ?? '';
 $today = date('Y-m-d');
 $nowTime = date('H:i:s');
 
-// Six hours in seconds
+// Employees and HR must work at least six hours before checking out.
 $minimumWorkSeconds = 6 * 60 * 60;
 
 // Return HR users to HR dashboard
@@ -84,7 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 id,
                 date,
                 clock_in,
-                clock_out
+                clock_out,
+                status
             FROM attendance
             WHERE user_id = ?
             AND date = ?
@@ -122,72 +123,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $existingAttendance['clock_in']
         );
 
-        $currentTimestamp = time();
+        $currentTimestamp = strtotime($today . ' ' . $nowTime);
+        $workedSeconds = max(0, $currentTimestamp - $checkInTimestamp);
 
-        $workedSeconds =
-            $currentTimestamp - $checkInTimestamp;
-
-        // Prevent checkout before six hours
+        // Enforce the six-hour rule on the server. Hiding or enabling the
+        // dashboard button must never be the only protection.
         if ($workedSeconds < $minimumWorkSeconds) {
-            $minimumCheckoutTimestamp =
-                $checkInTimestamp + $minimumWorkSeconds;
+            $remainingSeconds = $minimumWorkSeconds - $workedSeconds;
+            $remainingHours = intdiv($remainingSeconds, 3600);
+            $remainingMinutes = (int) ceil(($remainingSeconds % 3600) / 60);
 
-            $remainingSeconds =
-                $minimumWorkSeconds - $workedSeconds;
-
-            $remainingHours = intdiv(
-                $remainingSeconds,
-                3600
-            );
-
-            $remainingMinutes = (int)ceil(
-                ($remainingSeconds % 3600) / 60
-            );
-
+            // Avoid displaying "60 minutes" after rounding.
             if ($remainingMinutes === 60) {
                 $remainingHours++;
                 $remainingMinutes = 0;
             }
 
+            $remainingText = [];
+            if ($remainingHours > 0) {
+                $remainingText[] = $remainingHours .
+                    ($remainingHours === 1 ? ' hour' : ' hours');
+            }
+            if ($remainingMinutes > 0) {
+                $remainingText[] = $remainingMinutes .
+                    ($remainingMinutes === 1 ? ' minute' : ' minutes');
+            }
+
             $_SESSION['flash_error'] =
-                "You can check out only after completing 6 hours. " .
-                "Checkout will be available at " .
-                date('h:i A', $minimumCheckoutTimestamp) .
-                ". Remaining time: " .
-                $remainingHours .
-                " hour(s) and " .
-                $remainingMinutes .
-                " minute(s).";
+                "Checkout is available only after completing 6 hours. " .
+                "Please wait " . implode(' and ', $remainingText) . ".";
 
             header("Location: " . $dashboardPage);
             exit;
         }
 
-        $totalHours = round(
-            $workedSeconds / 3600,
-            2
-        );
+        $totalHours = round($workedSeconds / 3600, 2);
+
+        // Preserve the check-in status after the minimum shift is completed.
+        $finalStatus = $existingAttendance['status'] ?? 'present';
 
         $updateStatement = $db->prepare("
             UPDATE attendance
             SET
                 clock_out = ?,
-                total_hours = ?
+                total_hours = ?,
+                status = ?
             WHERE id = ?
         ");
 
         $updateStatement->execute([
             $nowTime,
             $totalHours,
+            $finalStatus,
             $existingAttendance['id']
         ]);
 
         $_SESSION['flash_success'] =
-            "Checked out successfully at " .
-            formatTime($nowTime) .
-            ". Total time worked: " .
-            $totalHours .
-            " hours.";
+            "Checked out successfully at " . formatTime($nowTime) .
+            ". Total shift time logged: " . $totalHours . " hrs.";
 
         header("Location: " . $dashboardPage);
         exit;
