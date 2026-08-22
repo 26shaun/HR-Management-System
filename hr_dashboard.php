@@ -40,6 +40,18 @@ $employeesStmt = $db->query("
 $employees = $employeesStmt->fetchAll();
 foreach ($employees as &$emp) {
     $emp['leave_balance'] = getUserLeaveBalance($emp['id']);
+    
+    // Fetch last 15 attendance logs for this employee
+    $attHStmt = $db->prepare("SELECT * FROM attendance WHERE user_id = ? ORDER BY date DESC LIMIT 15");
+    $attHStmt->execute([$emp['id']]);
+    $attLogs = $attHStmt->fetchAll();
+    foreach ($attLogs as &$al) {
+        $al['formatted_date'] = date('D, M d, Y', strtotime($al['date']));
+        $al['formatted_in'] = formatTime($al['clock_in']);
+        $al['formatted_out'] = $al['clock_out'] ? formatTime($al['clock_out']) : 'In Progress';
+    }
+    unset($al);
+    $emp['attendance_history'] = $attLogs;
 }
 unset($emp);
 
@@ -1002,6 +1014,17 @@ include __DIR__ . '/includes/header.php';
                         </div>
                     </div>
 
+                    <!-- Employee Attendance Log Timings -->
+                    <div style="margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                            <span><i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i> Attendance Timings History</span>
+                            <span style="font-size: 0.725rem; color: var(--text-muted); font-weight: 400;">(Recent Shifts)</span>
+                        </div>
+                        <div id="vEmpAttLogs" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
                     <div style="margin-top: 1.5rem; text-align: right;">
                         <button type="button" class="btn btn-secondary" onclick="closeModal('viewEmployeeModal')">Close Profile</button>
                     </div>
@@ -1041,6 +1064,35 @@ include __DIR__ . '/includes/header.php';
             document.getElementById('vEmpPaidRemaining').textContent = bal.paid_remaining + ' Days';
             document.getElementById('vEmpPaidUsed').textContent = bal.paid_used + ' Days';
             document.getElementById('vEmpUnpaidUsed').textContent = bal.unpaid_used + ' Days';
+
+            // Render Attendance Timings Logs
+            const logsContainer = document.getElementById('vEmpAttLogs');
+            logsContainer.innerHTML = '';
+            const logs = emp.attendance_history || [];
+
+            if (logs.length === 0) {
+                logsContainer.innerHTML = '<div style="padding: 0.75rem; text-align: center; color: var(--text-muted); font-size: 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm);">No attendance timing records found for this employee.</div>';
+            } else {
+                logs.forEach(log => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.8rem;';
+                    
+                    const statusClass = log.status ? log.status.toLowerCase() : 'present';
+                    const statusText = (log.status || 'present').replace('_', ' ').toUpperCase();
+                    
+                    item.innerHTML = `
+                        <div>
+                            <strong>${log.formatted_date || log.date}</strong>
+                            <div style="font-size: 0.725rem; color: var(--text-muted);">
+                                🕒 Clock In: <b>${log.formatted_in || log.clock_in}</b> • Out: <b>${log.formatted_out || (log.clock_out ? log.clock_out : 'In Progress')}</b>
+                                ${log.total_hours > 0 ? ` (${log.total_hours} hrs)` : ''}
+                            </div>
+                        </div>
+                        <span class="status-pill ${statusClass}" style="font-size: 0.65rem;">${statusText}</span>
+                    `;
+                    logsContainer.appendChild(item);
+                });
+            }
 
             openModal('viewEmployeeModal');
         }

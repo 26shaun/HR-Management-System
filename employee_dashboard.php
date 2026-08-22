@@ -132,7 +132,19 @@ include __DIR__ . '/includes/header.php';
                                 <?php elseif (empty($todayAttendance['clock_out'])): ?>
                                     <span style="color: #6ee7b7;"><i class="fa-solid fa-circle-check"></i> Clocked In at <?= formatTime($todayAttendance['clock_in']) ?></span>
                                 <?php else: ?>
-                                    <span style="color: #93c5fd;"><i class="fa-solid fa-flag-checkered"></i> Clocked Out at <?= formatTime($todayAttendance['clock_out']) ?> (<?= $todayAttendance['total_hours'] ?> hrs)</span>
+                                    <?php
+                                    $inSec = strtotime($todayAttendance['date'] . ' ' . $todayAttendance['clock_in']);
+                                    $outSec = strtotime($todayAttendance['date'] . ' ' . $todayAttendance['clock_out']);
+                                    $durSec = max(0, $outSec - $inSec);
+                                    if ($durSec < 60) {
+                                        $durText = '< 1 min';
+                                    } elseif ($durSec < 3600) {
+                                        $durText = round($durSec / 60) . ' mins';
+                                    } else {
+                                        $durText = number_format($todayAttendance['total_hours'], 2) . ' hrs';
+                                    }
+                                    ?>
+                                    <span style="color: #93c5fd;"><i class="fa-solid fa-flag-checkered"></i> Clocked Out at <?= formatTime($todayAttendance['clock_out']) ?> (<?= $durText ?>)</span>
                                 <?php endif; ?>
                             </div>
                         </div>
