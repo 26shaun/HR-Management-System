@@ -1,69 +1,198 @@
 <?php
+
 require_once __DIR__ . '/../config/db.php';
+
 requireAuth();
 
 $db = getDBConnection();
 $currentUser = getCurrentUser();
+
 $action = $_POST['action'] ?? $_GET['action'] ?? '';
+
 $today = date('Y-m-d');
 $nowTime = date('H:i:s');
 
+// Six hours in seconds
+$minimumWorkSeconds = 6 * 60 * 60;
+
+// Return HR users to HR dashboard
+$dashboardPage = isHR()
+    ? '../hr_dashboard.php'
+    : '../employee_dashboard.php';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // 1. Clock In
+
+    // Check in
     if ($action === 'clock_in') {
-        // Check if attendance entry already exists for today
-        $stmt = $db->prepare("SELECT id, clock_in FROM attendance WHERE user_id = ? AND date = ? LIMIT 1");
-        $stmt->execute([$currentUser['id'], $today]);
-        $existing = $stmt->fetch();
+        $statement = $db->prepare("
+            SELECT id, clock_in
+            FROM attendance
+            WHERE user_id = ?
+            AND date = ?
+            LIMIT 1
+        ");
 
-        if ($existing) {
-            $_SESSION['flash_info'] = "You have already clocked in today at " . formatTime($existing['clock_in']) . ".";
+        $statement->execute([
+            $currentUser['id'],
+            $today
+        ]);
+
+        $existingAttendance = $statement->fetch();
+
+        if ($existingAttendance) {
+            $_SESSION['flash_info'] =
+                "You have already checked in today at " .
+                formatTime($existingAttendance['clock_in']) .
+                ".";
         } else {
-            // Determine if late (e.g. after 09:15 AM)
-            $status = (strtotime($nowTime) > strtotime('09:15:00')) ? 'late' : 'present';
+            // Mark as late when checking in after 9:15 AM
+            $status = strtotime($nowTime) > strtotime('09:15:00')
+                ? 'late'
+                : 'present';
 
-            $insertStmt = $db->prepare("
-                INSERT INTO attendance (user_id, date, clock_in, status)
+            $insertStatement = $db->prepare("
+                INSERT INTO attendance (
+                    user_id,
+                    date,
+                    clock_in,
+                    status
+                )
                 VALUES (?, ?, ?, ?)
             ");
-            $insertStmt->execute([$currentUser['id'], $today, $nowTime, $status]);
-            $_SESSION['flash_success'] = "Clocked in successfully at " . formatTime($nowTime) . " (" . ucfirst($status) . ").";
+
+            $insertStatement->execute([
+                $currentUser['id'],
+                $today,
+                $nowTime,
+                $status
+            ]);
+
+            $_SESSION['flash_success'] =
+                "Checked in successfully at " .
+                formatTime($nowTime) .
+                ".";
         }
 
-        header("Location: ../employee_dashboard.php");
+        header("Location: " . $dashboardPage);
         exit;
     }
 
-    // 2. Clock Out
+    // Check out
     if ($action === 'clock_out') {
-        $stmt = $db->prepare("SELECT id, clock_in, clock_out FROM attendance WHERE user_id = ? AND date = ? LIMIT 1");
-        $stmt->execute([$currentUser['id'], $today]);
-        $existing = $stmt->fetch();
+        $statement = $db->prepare("
+            SELECT
+                id,
+                date,
+                clock_in,
+                clock_out
+            FROM attendance
+            WHERE user_id = ?
+            AND date = ?
+            LIMIT 1
+        ");
 
-        if (!$existing) {
-            $_SESSION['flash_error'] = "You have not clocked in today yet!";
-        } elseif (!empty($existing['clock_out'])) {
-            $_SESSION['flash_info'] = "You have already clocked out for today at " . formatTime($existing['clock_out']) . ".";
-        } else {
-            $clockInTime = strtotime($existing['clock_in']);
-            $clockOutTime = strtotime($nowTime);
-            $secondsDiff = max(0, $clockOutTime - $clockInTime);
-            $hours = round($secondsDiff / 3600, 2);
+        $statement->execute([
+            $currentUser['id'],
+            $today
+        ]);
 
-            $updateStmt = $db->prepare("
-                UPDATE attendance 
-                SET clock_out = ?, total_hours = ? 
-                WHERE id = ?
-            ");
-            $updateStmt->execute([$nowTime, $hours, $existing['id']]);
-            $_SESSION['flash_success'] = "Clocked out successfully at " . formatTime($nowTime) . ". Total time worked: " . $hours . " hrs.";
+        $existingAttendance = $statement->fetch();
+
+        if (!$existingAttendance) {
+            $_SESSION['flash_error'] =
+                "You must check in before checking out.";
+
+            header("Location: " . $dashboardPage);
+            exit;
         }
 
-        header("Location: ../employee_dashboard.php");
+        if (!empty($existingAttendance['clock_out'])) {
+            $_SESSION['flash_info'] =
+                "You have already checked out today at " .
+                formatTime($existingAttendance['clock_out']) .
+                ".";
+
+            header("Location: " . $dashboardPage);
+            exit;
+        }
+
+        $checkInTimestamp = strtotime(
+            $existingAttendance['date'] .
+            ' ' .
+            $existingAttendance['clock_in']
+        );
+
+        $currentTimestamp = time();
+
+        $workedSeconds =
+            $currentTimestamp - $checkInTimestamp;
+
+        // Prevent checkout before six hours
+        if ($workedSeconds < $minimumWorkSeconds) {
+            $minimumCheckoutTimestamp =
+                $checkInTimestamp + $minimumWorkSeconds;
+
+            $remainingSeconds =
+                $minimumWorkSeconds - $workedSeconds;
+
+            $remainingHours = intdiv(
+                $remainingSeconds,
+                3600
+            );
+
+            $remainingMinutes = (int)ceil(
+                ($remainingSeconds % 3600) / 60
+            );
+
+            if ($remainingMinutes === 60) {
+                $remainingHours++;
+                $remainingMinutes = 0;
+            }
+
+            $_SESSION['flash_error'] =
+                "You can check out only after completing 6 hours. " .
+                "Checkout will be available at " .
+                date('h:i A', $minimumCheckoutTimestamp) .
+                ". Remaining time: " .
+                $remainingHours .
+                " hour(s) and " .
+                $remainingMinutes .
+                " minute(s).";
+
+            header("Location: " . $dashboardPage);
+            exit;
+        }
+
+        $totalHours = round(
+            $workedSeconds / 3600,
+            2
+        );
+
+        $updateStatement = $db->prepare("
+            UPDATE attendance
+            SET
+                clock_out = ?,
+                total_hours = ?
+            WHERE id = ?
+        ");
+
+        $updateStatement->execute([
+            $nowTime,
+            $totalHours,
+            $existingAttendance['id']
+        ]);
+
+        $_SESSION['flash_success'] =
+            "Checked out successfully at " .
+            formatTime($nowTime) .
+            ". Total time worked: " .
+            $totalHours .
+            " hours.";
+
+        header("Location: " . $dashboardPage);
         exit;
     }
 }
 
-// Default fallback
-header("Location: ../employee_dashboard.php");
+header("Location: " . $dashboardPage);
 exit;
