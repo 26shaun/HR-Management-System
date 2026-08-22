@@ -38,8 +38,28 @@ $employeesStmt = $db->query("
     LEFT JOIN departments d ON u.department_id = d.id
     ORDER BY u.id DESC
 ");
+<<<<<<< HEAD
 
 $employees = $employeesStmt ? $employeesStmt->fetchAll() : [];
+=======
+$employees = $employeesStmt->fetchAll();
+foreach ($employees as &$emp) {
+    $emp['leave_balance'] = getUserLeaveBalance($emp['id']);
+    
+    // Fetch last 15 attendance logs for this employee
+    $attHStmt = $db->prepare("SELECT * FROM attendance WHERE user_id = ? ORDER BY date DESC LIMIT 15");
+    $attHStmt->execute([$emp['id']]);
+    $attLogs = $attHStmt->fetchAll();
+    foreach ($attLogs as &$al) {
+        $al['formatted_date'] = date('D, M d, Y', strtotime($al['date']));
+        $al['formatted_in'] = formatTime($al['clock_in']);
+        $al['formatted_out'] = $al['clock_out'] ? formatTime($al['clock_out']) : 'In Progress';
+    }
+    unset($al);
+    $emp['attendance_history'] = $attLogs;
+}
+unset($emp);
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
 
 // 3. Fetch Pending & Recent Leaves
 $leavesStmt = $db->query("
@@ -73,6 +93,19 @@ $attendanceStmt = $db->query("
 
 $todayAttendance = $attendanceStmt->fetchAll();
 
+// 4b. Fetch Weekly Attendance (All Employees for current week Mon-Sun)
+$mondayThisWeek = date('Y-m-d', strtotime('monday this week'));
+$sundayThisWeek = date('Y-m-d', strtotime('sunday this week'));
+$weeklyAttendanceStmt = $db->query("
+    SELECT a.*, u.name AS employee_name, u.email AS employee_email, d.name AS department_name
+    FROM attendance a
+    JOIN users u ON a.user_id = u.id
+    LEFT JOIN departments d ON u.department_id = d.id
+    WHERE a.date BETWEEN '$mondayThisWeek' AND '$sundayThisWeek'
+    ORDER BY a.date DESC, a.clock_in DESC
+");
+$weeklyAttendance = $weeklyAttendanceStmt->fetchAll();
+
 // 5. Fetch Announcements
 $announcementsStmt = $db->query("
     SELECT a.*, u.name AS author_name
@@ -94,11 +127,13 @@ $departments = $deptStmt->fetchAll();
 
 $flashSuccess = $_SESSION['flash_success'] ?? null;
 $flashError = $_SESSION['flash_error'] ?? null;
+$flashWarning = $_SESSION['flash_warning'] ?? null;
 $flashInfo = $_SESSION['flash_info'] ?? null;
 
 unset(
     $_SESSION['flash_success'],
     $_SESSION['flash_error'],
+    $_SESSION['flash_warning'],
     $_SESSION['flash_info']
 );
 
@@ -121,6 +156,13 @@ include __DIR__ . '/includes/header.php';
                 <div class="alert alert-success">
                     <i class="fa-solid fa-circle-check"></i>
                     <span><?= htmlspecialchars($flashSuccess) ?></span>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($flashWarning): ?>
+                <div class="alert alert-warning">
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <span><?= htmlspecialchars($flashWarning) ?></span>
                 </div>
             <?php endif; ?>
 
@@ -453,9 +495,13 @@ include __DIR__ . '/includes/header.php';
 
                 </div>
 
+<<<<<<< HEAD
 
                 <div class="table-responsive">
 
+=======
+                <div class="table-responsive">
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
                     <table class="custom-table">
 
                         <thead>
@@ -701,6 +747,7 @@ include __DIR__ . '/includes/header.php';
 
                                                     </form>
 
+<<<<<<< HEAD
 
                                                     <!-- Reject form -->
 
@@ -778,6 +825,94 @@ include __DIR__ . '/includes/header.php';
 
             </div>
 
+=======
+                                                
+                                                   <!-- Reject button -->
+<details class="reject-details">
+    <summary class="btn btn-danger btn-sm">
+        <i class="fa-solid fa-xmark"></i>
+        Reject
+    </summary>
+
+    <form
+        action="actions/leave_action.php"
+        method="POST"
+        onsubmit="return prepareRejection(this)"
+        
+        style="
+            margin-top: 0.7rem;
+            min-width: 230px;
+            padding: 0.75rem;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            background: #fff7f7;
+        "
+    >
+        <input
+            type="hidden"
+            name="action"
+            value="review_leave"
+        >
+
+        <input
+            type="hidden"
+            name="leave_id"
+            value="<?= (int)$l['id'] ?>"
+        >
+
+        <input
+            type="hidden"
+            name="status"
+            value="rejected"
+        >
+
+        <label
+            for="rejectComment<?= (int)$l['id'] ?>"
+            style="
+                display: block;
+                margin-bottom: 0.4rem;
+                font-size: 0.8rem;
+                font-weight: 600;
+            "
+        >
+            Reason for rejection
+        </label>
+
+        <textarea
+            id="rejectComment<?= (int)$l['id'] ?>"
+            name="review_comment"
+            class="form-control"
+            rows="3"
+            minlength="5"
+            placeholder="Explain why this leave is being rejected"
+            required
+            style="margin-bottom: 0.6rem;"
+        ></textarea>
+
+        <button
+            type="submit"
+            class="btn btn-danger btn-sm"
+        >
+            Confirm rejection
+        </button>
+    </form>
+</details>
+                                                </div>
+                                            </div>
+                                        <?php else: ?>
+                                            <span style="font-size: 0.8rem; color: var(--text-muted);">
+                                                Reviewed by <?= htmlspecialchars($l['reviewer_name'] ?? 'HR') ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
 
             <div class="grid-3">
 
@@ -844,6 +979,7 @@ include __DIR__ . '/includes/header.php';
                                 <?php if (empty($employees)): ?>
 
                                     <tr>
+<<<<<<< HEAD
 
                                         <td
                                             colspan="5"
@@ -854,6 +990,57 @@ include __DIR__ . '/includes/header.php';
                                             "
                                         >
                                             No employees found.
+=======
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="Click to view full employee profile">
+                                                <div class="user-mini-avatar"
+                                                    style="width: 36px; height: 36px; font-size: 0.85rem; background: var(--primary-gradient); color: #ffffff; cursor: pointer;">
+                                                    <?= strtoupper(substr($emp['name'], 0, 1)) ?>
+                                                </div>
+                                                <div>
+                                                    <div style="font-weight: 600; color: var(--primary); text-decoration: underline; text-underline-offset: 2px;">
+                                                        <?= htmlspecialchars($emp['name']) ?>
+                                                    </div>
+                                                    <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                        <?= htmlspecialchars($emp['email']) ?>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="role-badge <?= $emp['role'] ?>"
+                                                style="font-size: 0.7rem; padding: 2px 8px;">
+                                                <?= strtoupper($emp['role']) ?>
+                                            </span>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                                                <?= htmlspecialchars($emp['department_name'] ?? 'Unassigned') ?>
+                                            </div>
+                                        </td>
+                                        <td><?= htmlspecialchars($emp['designation'] ?? 'Staff') ?></td>
+                                        <td>
+                                            <span class="status-pill <?= $emp['status'] ?>">
+                                                <?= ucfirst($emp['status']) ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                                <button type="button" class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 0.75rem;" onclick='openViewEmployeeModal(<?= htmlspecialchars(json_encode($emp), ENT_QUOTES, 'UTF-8') ?>)' title="View Full Details">
+                                                    <i class="fa-regular fa-eye"></i> Details
+                                                </button>
+                                                <?php if ($emp['id'] !== $currentUser['id']): ?>
+                                                    <form action="actions/employee_action.php" method="POST"
+                                                        onsubmit="return confirm('Are you sure you want to remove this employee account?');"
+                                                        style="display: inline;">
+                                                        <input type="hidden" name="action" value="delete_employee">
+                                                        <input type="hidden" name="user_id" value="<?= $emp['id'] ?>">
+                                                        <button type="submit" class="btn btn-secondary btn-sm"
+                                                            style="color: #ef4444; padding: 4px 8px;" title="Delete">
+                                                            <i class="fa-regular fa-trash-can"></i>
+                                                        </button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
                                         </td>
 
                                     </tr>
@@ -1046,6 +1233,7 @@ include __DIR__ . '/includes/header.php';
 
 
                 <!-- Today's Attendance Feed & Announcements -->
+<<<<<<< HEAD
 
                 <div
                     style="
@@ -1155,9 +1343,54 @@ include __DIR__ . '/includes/header.php';
                                             <?= ucfirst($att['status']) ?>
                                         </span>
 
+=======
+                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    <!-- Attendance Hub (Daily & Weekly Views) -->
+                    <div class="card" id="attendanceSection">
+                        <div class="card-header" style="flex-wrap: wrap; gap: 0.5rem;">
+                            <div class="card-title">
+                                <i class="fa-solid fa-clock" style="color: var(--primary);"></i>
+                                Master Attendance Hub
+                            </div>
+                            <div style="display: flex; gap: 4px; background: var(--bg-main); padding: 3px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <button type="button" id="hrAttDailyBtn" onclick="switchHRAttTab('daily')" class="btn btn-sm btn-primary" style="font-size: 0.7rem; padding: 2px 8px;">Daily View</button>
+                                <button type="button" id="hrAttWeeklyBtn" onclick="switchHRAttTab('weekly')" class="btn btn-sm btn-secondary" style="font-size: 0.7rem; padding: 2px 8px;">Weekly View</button>
+                            </div>
+                        </div>
+
+                        <!-- Employee Quick Filter -->
+                        <div style="margin-bottom: 0.85rem;">
+                            <select id="hrAttEmpFilter" onchange="filterHRAttendance()" class="form-control" style="font-size: 0.8rem; padding: 0.35rem 0.65rem;">
+                                <option value="all">🔍 Filter by Employee (All Team Members)</option>
+                                <?php foreach ($employees as $e): ?>
+                                    <option value="<?= $e['id'] ?>"><?= htmlspecialchars($e['name']) ?> (<?= htmlspecialchars($e['department_name'] ?? 'General') ?>)</option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+
+                        <!-- Daily Attendance View -->
+                        <div id="hrAttDailyView" style="display: flex; flex-direction: column; gap: 0.65rem; max-height: 280px; overflow-y: auto;">
+                            <?php if (empty($todayAttendance)): ?>
+                                <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1.25rem 0;">
+                                    No attendance records logged today yet.
+                                </p>
+                            <?php else: ?>
+                                <?php foreach ($todayAttendance as $att): ?>
+                                    <div class="hr-att-item" data-user-id="<?= $att['user_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                        <div>
+                                            <strong style="font-size: 0.875rem; color: var(--text-main);"><?= htmlspecialchars($att['employee_name']) ?></strong>
+                                            <div style="font-size: 0.75rem; color: var(--text-muted);">
+                                                In: <?= formatTime($att['clock_in']) ?>
+                                                <?= $att['clock_out'] ? ' • Out: ' . formatTime($att['clock_out']) : '' ?>
+                                                <?= $att['total_hours'] > 0 ? ' (' . $att['total_hours'] . ' hrs)' : '' ?>
+                                            </div>
+                                        </div>
+                                        <span class="status-pill <?= htmlspecialchars($att['status']) ?>"><?= ucfirst(str_replace('_', ' ', $att['status'])) ?></span>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
                                     </div>
 
                                 <?php endforeach; ?>
+<<<<<<< HEAD
 
                             </div>
 
@@ -1165,6 +1398,69 @@ include __DIR__ . '/includes/header.php';
 
                     </div>
 
+=======
+                            <?php endif; ?>
+                        </div>
+
+                        <!-- Weekly Attendance View -->
+                        <div id="hrAttWeeklyView" style="display: none; flex-direction: column; gap: 0.65rem; max-height: 280px; overflow-y: auto;">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 2px;">
+                                Current Week: <?= formatNiceDate($mondayThisWeek) ?> - <?= formatNiceDate($sundayThisWeek) ?>
+                            </div>
+                            <?php if (empty($weeklyAttendance)): ?>
+                                <p style="color: var(--text-muted); font-size: 0.875rem; text-align: center; padding: 1.25rem 0;">
+                                    No attendance records logged for this week.
+                                </p>
+                            <?php else: ?>
+                                <?php foreach ($weeklyAttendance as $wAtt): ?>
+                                    <div class="hr-att-item" data-user-id="<?= $wAtt['user_id'] ?>" style="display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.8rem; background: #ffffff; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                        <div>
+                                            <strong style="font-size: 0.85rem; color: var(--text-main);"><?= htmlspecialchars($wAtt['employee_name']) ?></strong>
+                                            <div style="font-size: 0.725rem; color: var(--text-muted);">
+                                                <?= date('D, M d', strtotime($wAtt['date'])) ?> • In: <?= formatTime($wAtt['clock_in']) ?>
+                                                <?= $wAtt['clock_out'] ? ' • Out: ' . formatTime($wAtt['clock_out']) : '' ?>
+                                            </div>
+                                        </div>
+                                        <span class="status-pill <?= htmlspecialchars($wAtt['status']) ?>"><?= ucfirst(str_replace('_', ' ', $wAtt['status'])) ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <script>
+                    function switchHRAttTab(view) {
+                        const dView = document.getElementById('hrAttDailyView');
+                        const wView = document.getElementById('hrAttWeeklyView');
+                        const dBtn = document.getElementById('hrAttDailyBtn');
+                        const wBtn = document.getElementById('hrAttWeeklyBtn');
+
+                        if (view === 'daily') {
+                            dView.style.display = 'flex';
+                            wView.style.display = 'none';
+                            dBtn.className = 'btn btn-sm btn-primary';
+                            wBtn.className = 'btn btn-sm btn-secondary';
+                        } else {
+                            dView.style.display = 'none';
+                            wView.style.display = 'flex';
+                            dBtn.className = 'btn btn-sm btn-secondary';
+                            wBtn.className = 'btn btn-sm btn-primary';
+                        }
+                    }
+
+                    function filterHRAttendance() {
+                        const selectedUserId = document.getElementById('hrAttEmpFilter').value;
+                        const items = document.querySelectorAll('.hr-att-item');
+                        items.forEach(item => {
+                            if (selectedUserId === 'all' || item.getAttribute('data-user-id') === selectedUserId) {
+                                item.style.display = 'flex';
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        });
+                    }
+                    </script>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f
 
                     <!-- Announcements Card -->
 
@@ -1859,6 +2155,7 @@ include __DIR__ . '/includes/header.php';
 
         </div>
 
+<<<<<<< HEAD
         <!-- YOUR EDIT EMPLOYEE MODAL ENDS HERE -->
 
 
@@ -1887,3 +2184,193 @@ include __DIR__ . '/includes/header.php';
     </div>
 
 </div>
+=======
+        <!-- Modal: View Full Employee Profile & Details -->
+        <div class="modal-overlay" id="viewEmployeeModal">
+            <div class="modal-card" style="max-width: 620px;">
+                <div class="modal-header" style="background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%); color: #ffffff; padding: 1.25rem 1.5rem; border-radius: var(--radius-lg) var(--radius-lg) 0 0;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div id="vEmpAvatar" style="width: 52px; height: 52px; border-radius: 50%; background: #ffffff; color: var(--primary); font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); flex-shrink: 0;">
+                            E
+                        </div>
+                        <div>
+                            <h3 id="vEmpName" style="font-size: 1.3rem; font-weight: 800; margin: 0; color: #ffffff;">Employee Name</h3>
+                            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                                <span id="vEmpRole" class="role-badge" style="font-size: 0.7rem; background: rgba(255,255,255,0.2); color: #fff;">ROLE</span>
+                                <span id="vEmpStatus" class="status-pill active" style="font-size: 0.7rem;">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="modal-close-btn" onclick="closeModal('viewEmployeeModal')" style="color: #ffffff; font-size: 1.75rem;">&times;</button>
+                </div>
+                <div class="modal-body" style="padding: 1.5rem;">
+                    <!-- Leave Allowance Summary Card -->
+                    <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.2); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 6px;">
+                            <i class="fa-solid fa-calculator"></i> Annual Leave Allowance Breakdown
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; text-align: center;">
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID REMAINING</div>
+                                <div id="vEmpPaidRemaining" style="font-size: 1.25rem; font-weight: 800; color: #10b981;">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">PAID TAKEN</div>
+                                <div id="vEmpPaidUsed" style="font-size: 1.25rem; font-weight: 800; color: var(--primary);">0 Days</div>
+                            </div>
+                            <div style="background: #ffffff; padding: 0.6rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                                <div style="font-size: 0.68rem; color: var(--text-muted); font-weight: 600;">UNPAID (LWP)</div>
+                                <div id="vEmpUnpaidUsed" style="font-size: 1.25rem; font-weight: 800; color: #f59e0b;">0 Days</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full Information Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;">
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Address</div>
+                            <strong id="vEmpEmail" style="word-break: break-all;">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Department</div>
+                            <strong id="vEmpDept">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Designation / Title</div>
+                            <strong id="vEmpDesignation">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Phone Number</div>
+                            <strong id="vEmpPhone">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Joining Date</div>
+                            <strong id="vEmpJoinDate">-</strong>
+                        </div>
+
+                        <div style="padding: 0.85rem; background: var(--bg-main); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                            <div style="font-size: 0.725rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 4px;">Email Verification</div>
+                            <span id="vEmpVerified" class="status-pill active">Verified</span>
+                        </div>
+                    </div>
+
+                    <!-- Employee Attendance Log Timings -->
+                    <div style="margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main); margin-bottom: 0.5rem; display: flex; align-items: center; justify-content: space-between;">
+                            <span><i class="fa-solid fa-clock-rotate-left" style="color: var(--primary);"></i> Attendance Timings History</span>
+                            <span style="font-size: 0.725rem; color: var(--text-muted); font-weight: 400;">(Recent Shifts)</span>
+                        </div>
+                        <div id="vEmpAttLogs" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem; text-align: right;">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal('viewEmployeeModal')">Close Profile</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        function openViewEmployeeModal(emp) {
+            if (!emp) return;
+            document.getElementById('vEmpName').textContent = emp.name || 'N/A';
+            document.getElementById('vEmpAvatar').textContent = (emp.name || 'E').charAt(0).toUpperCase();
+            document.getElementById('vEmpRole').textContent = (emp.role || 'employee').toUpperCase();
+            document.getElementById('vEmpEmail').textContent = emp.email || 'N/A';
+            document.getElementById('vEmpDept').textContent = emp.department_name || 'General';
+            document.getElementById('vEmpDesignation').textContent = emp.designation || 'Staff Member';
+            document.getElementById('vEmpPhone').textContent = emp.phone || 'Not Provided';
+            document.getElementById('vEmpJoinDate').textContent = emp.join_date || 'N/A';
+            
+            // Status
+            const statusEl = document.getElementById('vEmpStatus');
+            statusEl.textContent = (emp.status || 'active').toUpperCase();
+            statusEl.className = 'status-pill ' + (emp.status === 'active' ? 'active' : 'inactive');
+
+            // Verification
+            const verEl = document.getElementById('vEmpVerified');
+            if (parseInt(emp.email_verified) === 1) {
+                verEl.textContent = '✅ Email Verified';
+                verEl.className = 'status-pill present';
+            } else {
+                verEl.textContent = '⚠️ Verification Pending';
+                verEl.className = 'status-pill pending';
+            }
+
+            // Leave Balances
+            const bal = emp.leave_balance || { paid_remaining: 18, paid_used: 0, unpaid_used: 0 };
+            document.getElementById('vEmpPaidRemaining').textContent = bal.paid_remaining + ' Days';
+            document.getElementById('vEmpPaidUsed').textContent = bal.paid_used + ' Days';
+            document.getElementById('vEmpUnpaidUsed').textContent = bal.unpaid_used + ' Days';
+
+            // Render Attendance Timings Logs
+            const logsContainer = document.getElementById('vEmpAttLogs');
+            logsContainer.innerHTML = '';
+            const logs = emp.attendance_history || [];
+
+            if (logs.length === 0) {
+                logsContainer.innerHTML = '<div style="padding: 0.75rem; text-align: center; color: var(--text-muted); font-size: 0.8rem; background: var(--bg-main); border-radius: var(--radius-sm);">No attendance timing records found for this employee.</div>';
+            } else {
+                logs.forEach(log => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: var(--bg-main); border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.8rem;';
+                    
+                    const statusClass = log.status ? log.status.toLowerCase() : 'present';
+                    const statusText = (log.status || 'present').replace('_', ' ').toUpperCase();
+                    
+                    item.innerHTML = `
+                        <div>
+                            <strong>${log.formatted_date || log.date}</strong>
+                            <div style="font-size: 0.725rem; color: var(--text-muted);">
+                                🕒 Clock In: <b>${log.formatted_in || log.clock_in}</b> • Out: <b>${log.formatted_out || (log.clock_out ? log.clock_out : 'In Progress')}</b>
+                                ${log.total_hours > 0 ? ` (${log.total_hours} hrs)` : ''}
+                            </div>
+                        </div>
+                        <span class="status-pill ${statusClass}" style="font-size: 0.65rem;">${statusText}</span>
+                    `;
+                    logsContainer.appendChild(item);
+                });
+            }
+
+            openModal('viewEmployeeModal');
+        }
+</script>
+<script>
+function prepareRejection(form) {
+    const comment = form.querySelector(
+        'textarea[name="review_comment"]'
+    );
+
+    if (!comment || comment.value.trim().length < 5) {
+        alert(
+            "Please enter at least 5 characters as the rejection reason."
+        );
+
+        if (comment) {
+            comment.focus();
+        }
+
+        return false;
+    }
+
+    const button = form.querySelector(
+        'button[type="submit"]'
+    );
+
+    if (button) {
+        button.disabled = true;
+        button.innerHTML =
+            '<i class="fa-solid fa-spinner fa-spin"></i> Rejecting...';
+    }
+
+    return true;
+}
+</script>
+        <?php include __DIR__ . '/includes/footer.php'; ?>
+>>>>>>> 20476fd9ae618e089d9d458c33c36c7fccbf603f

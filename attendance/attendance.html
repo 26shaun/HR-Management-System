@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Management</title>
+    <link rel="stylesheet" href="../assets/css/attendance.css">
+</head>
+
+<body>
+
+<div class="container">
+
+    <!-- Header -->
+    <header>
+        <div>
+            <h1>Attendance Management</h1>
+            <p>Admin / HR Officer Dashboard</p>
+        </div>
+
+        <div class="header-date" id="currentDate"></div>
+    </header>
+
+    <!-- Summary Cards -->
+    <section class="summary">
+
+        <div class="card">
+            <h3>Total Employees</h3>
+            <strong id="totalEmployeesCount">25</strong>
+        </div>
+
+        <div class="card present">
+            <h3>Present</h3>
+            <strong id="presentCount">0</strong>
+        </div>
+
+        <div class="card absent">
+            <h3>Absent</h3>
+            <strong id="absentCount">0</strong>
+        </div>
+
+        <div class="card late">
+            <h3>Late</h3>
+            <strong id="lateCount">0</strong>
+        </div>
+
+    </section>
+
+    <!-- Attendance Controls -->
+    <section class="attendance-section">
+
+        <div class="section-header">
+            <div>
+                <h2>Attendance List</h2>
+                <p id="selectedDate"></p>
+            </div>
+
+            <div class="controls">
+
+                <button id="previousDay" class="date-btn">←</button>
+
+                <button id="todayBtn" class="today-btn">
+                    Today
+                </button>
+
+                <button id="nextDay" class="date-btn">→</button>
+
+                <input
+                    type="date"
+                    id="datePicker"
+                >
+
+            </div>
+        </div>
+
+        <!-- Search -->
+        <div class="search-box">
+            <input
+                type="text"
+                id="searchInput"
+                placeholder="Search employee..."
+            >
+        </div>
+
+        <!-- Attendance Table -->
+        <div class="table-container">
+
+            <table id="attendanceTable">
+
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Employee ID</th>
+                        <th>Check In</th>
+                        <th>Check Out</th>
+                        <th>Work Hours</th>
+                        <th>Extra Hours</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody id="attendanceTable">
+
+                    <tr>
+                        <td>Rahul Sharma</td>
+                        <td>EMP001</td>
+                        <td>09:00 AM</td>
+                        <td>06:00 PM</td>
+                        <td>8h 00m</td>
+                        <td>1h 00m</td>
+                        <td>
+                            <span class="status present-status">
+                                Present
+                            </span>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Ananya Rao</td>
+                        <td>EMP002</td>
+                        <td>09:15 AM</td>
+                        <td>05:30 PM</td>
+                        <td>7h 45m</td>
+                        <td>0h 45m</td>
+                        <td>
+                            <span class="status late-status">
+                                Late
+                            </span>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Priya Nair</td>
+                        <td>EMP003</td>
+                        <td>--</td>
+                        <td>--</td>
+                        <td>--</td>
+                        <td>--</td>
+                        <td>
+                            <span class="status absent-status">
+                                Absent
+                            </span>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td>Arjun Kumar</td>
+                        <td>EMP004</td>
+                        <td>08:55 AM</td>
+                        <td>05:45 PM</td>
+                        <td>8h 10m</td>
+                        <td>0h 10m</td>
+                        <td>
+                            <span class="status present-status">
+                                Present
+                            </span>
+                        </td>
+                    </tr>
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+</div>
+
+<script src="../assets/js/attendance.js"></script>
+
+</body>
+</html>
